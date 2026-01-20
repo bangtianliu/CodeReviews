@@ -13,8 +13,13 @@ I use Claude to:
 ## Structure
 
 ### `iree/`
-Code reviews from the IREE project:
-- **detailed_reviews.md** - All review comments with full context (640 comments across 74 PRs)
+Code reviews from the [IREE](https://github.com/iree-org/iree) project (compiler infrastructure):
+- **detailed_reviews.md** - All review comments with full context (828 comments across 148 PRs)
+- **checklist_from_reviews.md** - Actionable checklist derived from review patterns
+
+### `tuner/`
+Code reviews from the [AMD Shark Tuner](https://github.com/nod-ai/amd-shark-ai) project (performance tuning):
+- **detailed_reviews.md** - All review comments with full context (326 comments across 64 PRs)
 - **checklist_from_reviews.md** - Actionable checklist derived from review patterns
 
 ## How to Use
@@ -32,6 +37,14 @@ Using Claude Code with GitHub CLI:
 2. Filter for PRs reviewed by specific reviewers
 3. Retrieve detailed review comments via GitHub API
 4. Analyze patterns and generate documentation
+
+## Summary Statistics
+
+| Project | PRs Reviewed | Comments | Last Updated |
+|---------|--------------|----------|--------------|
+| IREE | 148 | 828 | 2026-01-19 |
+| Tuner | 64 | 326 | 2026-01-20 |
+| **Total** | **212** | **1,154** | |
 
 ---
 
