@@ -42,9 +42,9 @@ Using Claude Code with GitHub CLI:
 
 | Project | PRs Reviewed | Comments | Last Updated |
 |---------|--------------|----------|--------------|
-| IREE | 148 | 828 | 2026-01-19 |
-| Tuner | 64 | 326 | 2026-01-20 |
-| **Total** | **212** | **1,154** | |
+| IREE | 79 | 1248 | 2026-03-05 |
+| Tuner | 58 | 629 | 2026-03-05 |
+| **Total** | **137** | **1,877** | |
 
 ---
 
