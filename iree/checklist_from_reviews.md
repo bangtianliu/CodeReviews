@@ -2,9 +2,9 @@
 
 **Repository:** [iree-org/iree](https://github.com/iree-org/iree)
 
-**Based on 1248 review comments across 79 PRs**
+**Based on 1372 review comments across 103 PRs**
 
-**Generated:** 2026-03-05
+**Generated:** 2026-05-05
 
 ---
 
@@ -49,7 +49,25 @@
 - **Use `llvm::dyn_cast<T>`** when type might not match (returns nullptr on failure)
 - **Use `llvm::isa<T>`** for type checking without casting
 - **Never assert after `llvm::cast`** - it already asserts internally
+- **Never assert before `llvm::cast`** - the cast already asserts the same condition; the assert is redundant
 - Reference: [isa/cast/dyn_cast](https://llvm.org/docs/ProgrammersManual.html#the-isa-cast-and-dyn-cast-templates)
+
+### Integer Types
+- **Avoid `unsigned`** unless representing bitfields or modular arithmetic
+- **Prefer signed integer types** (`int64_t`, `int32_t`) over `unsigned`
+- Mixing signedness causes bugs the compiler can't diagnose
+- Reference: [Google C++ Style Guide - Integer Types](https://google.github.io/styleguide/cppguide.html#Integer_Types)
+
+### Constructor Initialization
+- **Do not use braced initializer lists to call constructors** - use `=` syntax instead:
+  ```cpp
+  // Good
+  SmallVector<Value> reverseValues = {kValue, loopCarryValues[0]};
+
+  // Avoid
+  SmallVector<Value> reverseValues({kValue, loopCarryValues[0]});
+  ```
+- Reference: [Abseil Tip #88](https://abseil.io/tips/88) | [LLVM Coding Standards](https://llvm.org/docs/CodingStandards.html#do-not-use-braced-initializer-lists-to-call-a-constructor)
 
 ### Iterators and Ranges
 - **Use `llvm::zip_equal`** for iterating over multiple ranges of equal length
@@ -76,6 +94,8 @@
 - **Document non-obvious behavior** and edge cases
 - **Don't use blank lines when you don't have to** - resist starting functions with a blank line
 - **Start error messages with a lower-case letter** and finish without a period
+- **Use descriptive variable names** - avoid single-letter names like `J`, `J1`, `vJ`; use `lhs`/`rhs` or semantically meaningful names
+- **Preserve existing comments when refactoring** - don't silently remove comments in moved/restructured code
 - Reference: [LLVM Coding Standards - Vertical Whitespace](https://google.github.io/styleguide/cppguide.html#Vertical_Whitespace)
 
 ### Function Parameters
@@ -145,6 +165,17 @@
 - **Use `ParentOneOf`** trait to check parent operation type
 - **Prefer existing traits** over custom CPred when available
 - **Keep custom CPred in ::verify()** if not reusable across ops
+- **Move region checks to `verifyRegions()`** - use `cast` instead of `dyn_cast` in verifyRegions since the region is already validated
+- **Avoid double negation** in conditionals:
+  ```cpp
+  // Good
+  if (ShapedType::isStatic(inputDimSize) && ShapedType::isStatic(outputDimSize)) {
+
+  // Avoid - double negation
+  if (!ShapedType::isDynamic(inputDimSize) && !ShapedType::isDynamic(outputDimSize)) {
+  ```
+- **Prefer simple loops over complex lambdas** in verification code for readability
+- **Keep operand order consistent** with the assembly format definition
 
 ### Extra Class Declarations
 - **Define helper methods in ODS** as `extraClassDeclaration` instead of repeating logic:
@@ -178,6 +209,10 @@
 - **Remove unnecessary attributes** (e.g., lowering_config) if not being tested
 - **Use `CHECK-SAME:`** for readability when splitting long CHECK lines
 - **Reduce whitespace** - don't add unnecessary blank lines in tests
+- **Tests must capture dataflow** - CHECK lines should verify connections between operations, not just individual op existence
+- **CHECK lines should verify actual values** - e.g., check layout element tile sizes, not just that a layout exists
+- **Don't add dead code** - land interface implementations alongside e2e tests that exercise them
+- **Remove tests that don't add value** - e.g., if a test only checks propagation already tested elsewhere
 
 ### C/C++ Tests
 - **Use gtest for C API tests** - C API tests can be written in C++
@@ -242,6 +277,27 @@
 ### Naming
 - **Use descriptive names** that reflect semantics (e.g., `dims_equal` not `size_equals`)
 - **Match existing naming conventions** in the transform dialect
+
+---
+
+## GPU Distribution and Reduction Patterns
+
+### Code Reuse
+- **Share helpers between similar patterns** - e.g., `DistributeArgCompare` and `DistributeMultiReduction` should share reduction logic with a parameterized combiner
+- **Don't special-case** for trivial dimensions (e.g., `elementTile == 1`) - let canonicalization fold these naturally
+- **Don't add redundant create_mask** operations with all-true inBounds
+
+### Pattern Structure
+- **Check invariants before creating IR** - validate all pattern preconditions before emitting any operations
+- **Use early return instead of else** after failure checks
+- **Use `continue` instead of `else`** in loop bodies
+- **Inline single-use values** - don't create variables used only once
+- **Store repeated expressions** in variables - e.g., `disInitValue3.getType().getElementType()` used multiple times
+
+### Naming and Consistency
+- **Function names should match their purpose** - `analyzeComparatorForSubgroupReduce` vs `doThreadReduction` is inconsistent
+- **Similar helper functions should have distinguishable names** that reflect what they do differently
+- **Be consistent with existing naming** in the codebase (e.g., `doThreadReduction` matches `DistributeMultiReduction`)
 
 ---
 

@@ -2,7 +2,808 @@
 
 **Repository:** nod-ai/amd-shark-ai
 
-**Generated:** 2026-03-05
+**Generated:** 2026-05-05
+
+---
+
+## PR #2910: [tuner] Restore matmul overpadding for TileAndFuse pipeline
+
+**URL:** https://github.com/nod-ai/amd-shark-ai/pull/2910
+**State:** MERGED
+
+(No review comments)
+
+---
+
+## PR #2907: [tuner] Add runtime requirements.txt install step to README
+
+**URL:** https://github.com/nod-ai/amd-shark-ai/pull/2907
+**State:** MERGED
+
+### Comment by RattataKing
+
+**File:** `amdsharktuner/README.md`
+
+**Line:** 26
+
+**Comment:**
+
+Let user know this contains IREE packages.
+```suggestion
+> [!NOTE]
+> These dependencies include IREE packages.
+
+```
+
+---
+
+## PR #2904: [Experimental][No Review Needed] MatVec tuner
+
+**URL:** https://github.com/nod-ai/amd-shark-ai/pull/2904
+**State:** OPEN
+
+(No review comments)
+
+---
+
+## PR #2901: [tuner] Fix missing amdsharktuner.rocm in pyproject.toml package list
+
+**URL:** https://github.com/nod-ai/amd-shark-ai/pull/2901
+**State:** MERGED
+
+### Comment by RattataKing
+
+**File:** `amdsharktuner/pyproject.toml`
+
+**Line:** 34
+
+**Comment:**
+
+How about using `"amdsharktuner*"` to also include feature subdirs?
+
+---
+
+## PR #2897: [tuner] Add col_major to MMA attrs and drop marker attributes for attention
+
+**URL:** https://github.com/nod-ai/amd-shark-ai/pull/2897
+**State:** MERGED
+
+### Comment by RattataKing
+
+**File:** `amdsharktuner/amdsharktuner/rocm/rocm_solutions.py`
+
+**Line:** 515
+
+**Comment:**
+
+I think this is incorrect, the `col_major` from upstream IREE is not a tunable parameter, it's a derived stamp checking whether `qk_output` layout can match to `pv_input` rhs layout.
+
+I think it should be `layouts_match = bool(model[can_reuse_rhs])`
+
+---
+
+### Comment by RattataKing
+
+**File:** `amdsharktuner/amdsharktuner/rocm/rocm_dispatch_constraints.py`
+
+**Line:** 549
+
+**Comment:**
+
+Needs to update constraints a bit to match upstream, https://github.com/iree-org/iree/pull/23631/ drops `qk_acc == pv_lhs` entirely
+
+---
+
+### Comment by bangtianliu
+
+**File:** `amdsharktuner/amdsharktuner/rocm/rocm_dispatch_constraints.py`
+
+**Line:** 549
+
+**Comment:**
+
+Yes, this IREE PR is not synced from the tuner side
+
+---
+
+### Comment by bangtianliu
+
+**File:** `amdsharktuner/amdsharktuner/rocm/rocm_solutions.py`
+
+**Line:** 515
+
+**Comment:**
+
+Yes, you are right here. 
+
+---
+
+### Comment by RattataKing
+
+**File:** `amdsharktuner/amdsharktuner/rocm/rocm_solutions.py`
+
+**Line:** 608
+
+**Comment:**
+
+NIT: Layout reuse can only happen when `can_reuse_rhs==True`, see all amd encoded mma: https://github.com/iree-org/iree/blob/main/compiler/src/iree/compiler/Codegen/Dialect/GPU/IR/IREEGPUAttrs.cpp#L287-L730, `qk_acc == pv_lhs` will always be False.
+
+To tighten constraints, I think tuner can just align with IREE, set `col_major=True` when `qk_acc == pv_rhs`, and avoid producing candidates where `col_major=False` even if `rhs_reuse==True`  (iree would resolve layout conflicts later but apparently result in slower performance).
+
+Therefore, we can prune some z3 variables to simplify the current constraints, only keep one variable `can_reuse_rhs`, drop `can_reuse_qk_output_for_pv_input, use_col_major, ...`, set `use_col_major = bool(model[can_reuse_rhs])`, and I think `prefetch_num_stages==2` would only work when there are no layout conflicts, which means it only depends on `can_reuse_rhs` too.
+
+---
+
+### Comment by RattataKing
+
+**File:** `amdsharktuner/amdsharktuner/rocm/rocm_solutions.py`
+
+**Line:** 608
+
+**Comment:**
+
+but is qk_acc==pv_lhs always False?
+
+---
+
+### Comment by bangtianliu
+
+**File:** `amdsharktuner/amdsharktuner/rocm/rocm_solutions.py`
+
+**Line:** 608
+
+**Comment:**
+
+I think you made one good point, I will keep it on my TODO list
+
+---
+
+## PR #2885: [tuner] update to use iree_gpu.LoweringPipeline API
+
+**URL:** https://github.com/nod-ai/amd-shark-ai/pull/2885
+**State:** MERGED
+
+(No review comments)
+
+---
+
+## PR #2884: [tuner] fix Logging Level misuse
+
+**URL:** https://github.com/nod-ai/amd-shark-ai/pull/2884
+**State:** MERGED
+
+(No review comments)
+
+---
+
+## PR #2865: [tuner] add use_direct_load (Global Load DMA) support to tuner
+
+**URL:** https://github.com/nod-ai/amd-shark-ai/pull/2865
+**State:** OPEN
+
+### Comment by Yu-Zhewen
+
+**File:** `amdsharktuner/tests/rocm/rocm_dispatch_constraints_test.py`
+
+**Line:** 696
+
+**Comment:**
+
+I don't think `vector_distribute` supports `use_direct_load=true` yet (see https://github.com/iree-org/iree/issues/23782)
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/amdsharktuner/rocm/rocm_common.py`
+
+**Line:** 44
+
+**Comment:**
+
+Isn't this encoded as dma sizes in the target attribute? The check will become obsolete once we enable dma for gfx1250+.
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/amdsharktuner/rocm/rocm_common.py`
+
+**Line:** 56
+
+**Comment:**
+
+This is needlessly verbose for what needs to happen:
+
+```suggestion
+def get_promotion_types_for_direct_load(num_operands: int) -> list[ir.Attribute]:
+    """Get promotion_types array for direct load (all operands use DMA)."""
+    return [ir.Attribute.parse("#iree_gpu.use_global_load_dma")] * num_operands
+```
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/amdsharktuner/libtuner.py`
+
+**Line:** 426
+
+**Comment:**
+
+Do we want to even expose it as an option? Why not decide it automatically?
+
+---
+
+### Comment by bangtianliu
+
+**File:** `amdsharktuner/amdsharktuner/rocm/rocm_common.py`
+
+**Line:** 44
+
+**Comment:**
+
+Good point! But it's not currently exposed in the Python `TargetInfo `bindings. 
+
+ The current hardcoded check matches what IREE does in: https://github.com/iree-org/iree/blob/d16df0b15a806c82e15c0e640ff53b6561b54dea/compiler/src/iree/compiler/Codegen/Common/GPU/GPUConvertToCoalescedDMA.cpp#L178
+ 
+ I will expose `dma_sizes` to `TargetInfo `bindings.  Once that's available, we can update the tuner. 
+
+---
+
+### Comment by bangtianliu
+
+**File:** `amdsharktuner/amdsharktuner/libtuner.py`
+
+**Line:** 426
+
+**Comment:**
+
+ In IREE, it is false by default: https://github.com/iree-org/iree/blob/4ed2c91a6e6a8c811860ed57a370c5d038b2f76b/compiler/src/iree/compiler/Codegen/LLVMGPU/KernelConfig.cpp#L114-L117
+
+ For now, this feature is mainly for advanced users like @lialan and @Yu-Zhewen to explore the heuristics for DMA/pipelining. 
+
+When IREE makes it true by default, we can revisit this.
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/amdsharktuner/libtuner.py`
+
+**Line:** 426
+
+**Comment:**
+
+OK, sounds good
+
+---
+
+## PR #2863: [tuner] Avoid textual IR for tuner tests
+
+**URL:** https://github.com/nod-ai/amd-shark-ai/pull/2863
+**State:** CLOSED
+
+### Comment by RattataKing
+
+**File:** `amdsharktuner/amdsharktuner/test_utils.py`
+
+**Line:** 30
+
+**Comment:**
+
+Maybe better move these pytest fixures to `/tests/conftest.py`, and rehome test_utils.py under `/test/` too?
+
+---
+
+### Comment by bangtianliu
+
+**File:** `amdsharktuner/amdsharktuner/test_utils.py`
+
+**Line:** 30
+
+**Comment:**
+
+Good catch!
+
+---
+
+### Comment by RattataKing
+
+**File:** `amdsharktuner/tests/rocm/rocm_parsers_test.py`
+
+**Line:** 91
+
+**Comment:**
+
+Either remove function name `... == "test"` checking below, or pass a name to this function for clarity
+```suggestion
+            with_fill=True,
+            func_name="test", # or a different name
+```
+
+---
+
+## PR #2855: [Tuner] Log padding warning once per MMA intrinsic shape
+
+**URL:** https://github.com/nod-ai/amd-shark-ai/pull/2855
+**State:** MERGED
+
+(No review comments)
+
+---
+
+## PR #2845: [tuner] Fix get_parent_function_name to handle split reduction nesting
+
+**URL:** https://github.com/nod-ai/amd-shark-ai/pull/2845
+**State:** MERGED
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/amdsharktuner/dispatch_parser.py`
+
+**Line:** 31
+
+**Comment:**
+
+There's a neat shortcut for this -- the walrus operator:
+
+```suggestion
+    op: ir.Operation = root_op
+    while op := root_op.parent:
+        if isinstance(op.opview, func.FuncOp):
+            return ir.StringAttr(op.opview.name).value
+```
+
+Also this way you don't have to pull in `_OperationBase`, which is meant to be 'private' type anyway
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/amdsharktuner/dispatch_parser.py`
+
+**Line:** 33
+
+**Comment:**
+
+I'd return `None` and let the caller decide how to handle it
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/amdsharktuner/dispatch_parser.py`
+
+**Line:** 21
+
+**Comment:**
+
+@RattataKing maybe you could add a python binding for `op->getParentOfType<T>()` to upstream mlir? Seems like a useful primitive for code like this.
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/tests/dispatch_parser_test.py`
+
+**Line:** 349
+
+**Comment:**
+
+Can we make this test case more concise by using some named op? It could even be something as simple as `linalg.fill` -- the code only checks for the root op attribute
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/tests/dispatch_parser_test.py`
+
+**Line:** 374
+
+**Comment:**
+
+We should also add a test case for when no `func.func` op is found
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/amdsharktuner/dispatch_parser.py`
+
+**Line:** 27
+
+**Comment:**
+
+FYI, this just landed -- we should be able to use it in a day or two
+
+---
+
+### Comment by bangtianliu
+
+**File:** `amdsharktuner/amdsharktuner/dispatch_parser.py`
+
+**Line:** 27
+
+**Comment:**
+
+Yeah, I will send another PR once the upstream PR is integrated into iree. 
+
+---
+
+## PR #2844: [tuner] add direct conv support along TileAndFuse pipeline
+
+**URL:** https://github.com/nod-ai/amd-shark-ai/pull/2844
+**State:** MERGED
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/amdsharktuner/rocm/rocm_common.py`
+
+**Line:** 34
+
+**Comment:**
+
+nit: Could we make it a bit enum and use `|` for selecting both? `enum.IntFlag` should support this.
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/amdsharktuner/candidate_gen.py`
+
+**Line:** 118
+
+**Comment:**
+
+This seems like unnecessary indirection -- the function seems very generic but the logic is very specific. If we are going to specialize like this, I'd rather do it directly within this function.
+
+---
+
+## PR #2843: Replace --iree-config-add-tuner-attributes with --iree-codegen-add-tuner-attributes
+
+**URL:** https://github.com/nod-ai/amd-shark-ai/pull/2843
+**State:** MERGED
+
+(No review comments)
+
+---
+
+## PR #2817: [Tuner] Add Fusilli tuner
+
+**URL:** https://github.com/nod-ai/amd-shark-ai/pull/2817
+**State:** MERGED
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/fusilli_tuner/fusilli_tuner.py`
+
+**Line:** 88
+
+**Comment:**
+
+We should make this more concise and explain what argv and return values are inline
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/fusilli_tuner/fusilli_tuner.py`
+
+**Line:** 130
+
+**Comment:**
+
+Can you explain what the default is?
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/fusilli_tuner/fusilli_tuner.py`
+
+**Line:** 136
+
+**Comment:**
+
+Is this for a single candidate or across all candidates?
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/fusilli_tuner/fusilli_tuner.py`
+
+**Line:** 140
+
+**Comment:**
+
+What does it mean that fusilli generates files internally?
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/fusilli_tuner/fusilli_tuner.py`
+
+**Line:** 141
+
+**Comment:**
+
+If you make argv the function argument you will be able to write unit tests for this funciton
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/fusilli_tuner/fusilli_tuner.py`
+
+**Line:** 186
+
+**Comment:**
+
+What if the output filename is specified within the same arg? `-o=foo.mlir`
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/fusilli_tuner/fusilli_tuner.py`
+
+**Line:** 192
+
+**Comment:**
+
+Similar here.
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/fusilli_tuner/fusilli_tuner.py`
+
+**Line:** 197
+
+**Comment:**
+
+nit: += ?
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/fusilli_tuner/fusilli_tuner.py`
+
+**Line:** 215
+
+**Comment:**
+
+It's obvious this is what's happening, but can you explain why we are doing this?
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/fusilli_tuner/fusilli_tuner.py`
+
+**Line:** 218
+
+**Comment:**
+
+same here
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/fusilli_tuner/README.md`
+
+**Line:** 26
+
+**Comment:**
+
+```suggestion
+Set up `PYTHONPATH`:
+```
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/fusilli_tuner/README.md`
+
+**Line:** 70
+
+**Comment:**
+
+Why did you decide to allow for this to be passed as arguments to fusilli_tuner instead of having it be a named argument like `--fusilli-args="conv -F 1 ..."`? I think the latter is less likely to break as each tool introduces new flags and may eventually have name collisions 
+
+---
+
+### Comment by bangtianliu
+
+**File:** `amdsharktuner/fusilli_tuner/fusilli_tuner.py`
+
+**Line:** 140
+
+**Comment:**
+
+Sorry, this code comment is kind of confusing and misleading. I will update it.
+
+The placeholder `"fusilli.mlir"` is inserted here just to satisfy `libtuner.parse_arguments()` which expects an `input_file` positional argument.  The actual benchmark MLIR files are generated later (this is what "Fusilli generates files # internally" means). 
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/tests/fusilli_tuner_test.py`
+
+**Line:** 49
+
+**Comment:**
+
+Can we also have a testcase with no trailing newline?
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/tests/fusilli_tuner_test.py`
+
+**Line:** 97
+
+**Comment:**
+
+Can we have parse_args take sys.argv as input instead?
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/fusilli_tuner/fusilli_tuner.py`
+
+**Line:** 249
+
+**Comment:**
+
+This is somewhat confusing to me -- I'd expect `case_dir` to already be the full location of fusilli cache based on the function docstring
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/fusilli_tuner/fusilli_tuner.py`
+
+**Line:** 350
+
+**Comment:**
+
+This seems like a footgun;  what if someone passes in their home dir as tmp dir?
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/fusilli_tuner/fusilli_tuner.py`
+
+**Line:** 315
+
+**Comment:**
+
+Can we add types across the implementation?
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/fusilli_tuner/fusilli_tuner.py`
+
+**Line:** 214
+
+**Comment:**
+
+Also in this function -- can we add type hints?
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/fusilli_tuner/fusilli_tuner.py`
+
+**Line:** 230
+
+**Comment:**
+
+exit early when the returncode is 0 isntead
+
+---
+
+### Comment by RattataKing
+
+**File:** `amdsharktuner/fusilli_tuner/fusilli_tuner.py`
+
+**Line:** 287
+
+**Comment:**
+
+Better add a checker `if len(graph_dirs) != 1`
+
+---
+
+### Comment by RattataKing
+
+**File:** `amdsharktuner/fusilli_tuner/fusilli_tuner.py`
+
+**Line:** 466
+
+**Comment:**
+
+And drop `traceback` import
+```suggestion
+            logging.exception(f"Error tuning benchmark {benchmark_path}")
+```
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/fusilli_tuner/fusilli_tuner.py`
+
+**Line:** 391
+
+**Comment:**
+
+Won't we run into issues with this directory being polluted by previous runs? Later on in `run_fusilli_benchmark_driver`, we do `env["FUSILLI_CACHE_DIR"] = str(cache_dir)` and `find_cached_artifacts` expects exactly one graph directory under `.cache/fusilli/`.
+
+Can you confirm if running the tuner with 2+ commands through the commands file and `--tmp-dir` works?
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/fusilli_tuner/__init__.py`
+
+**Line:** 5
+
+**Comment:**
+
+Don't we want to import something here from fusilli?
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/fusilli_tuner/fusilli_tuner.py`
+
+**Line:** 492
+
+**Comment:**
+
+should we also bail out if neither is set?
+
+---
+
+### Comment by kuhar
+
+**File:** `amdsharktuner/fusilli_tuner/fusilli_tuner.py`
+
+**Line:** 359
+
+**Comment:**
+
+This is probably not critical
+
+---
+
+### Comment by bangtianliu
+
+**File:** `amdsharktuner/fusilli_tuner/fusilli_tuner.py`
+
+**Line:** 391
+
+**Comment:**
+
+Yes, good catch!. It cause errors according to my local test. 
 
 ---
 

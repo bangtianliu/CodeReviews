@@ -6,8 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This repository contains automated analyses of code reviews collected using Claude. It organizes detailed review comments and generates actionable code style checklists from two projects:
 
-- **iree/** - Reviews from [IREE](https://github.com/iree-org/iree) compiler infrastructure (1248 comments, 79 PRs)
-- **tuner/** - Reviews from [AMD Shark Tuner](https://github.com/nod-ai/amd-shark-ai) performance tuning (629 comments, 58 PRs)
+- **iree/** - Reviews from [IREE](https://github.com/iree-org/iree) compiler infrastructure (1372 comments, 103 PRs)
+- **tuner/** - Reviews from [AMD Shark Tuner](https://github.com/nod-ai/amd-shark-ai) performance tuning (684 comments, 72 PRs)
 
 Each project directory contains:
 - `detailed_reviews.md` - Full review comments with context

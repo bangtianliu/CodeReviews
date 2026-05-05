@@ -2,9 +2,9 @@
 
 **Repository:** [nod-ai/amd-shark-ai](https://github.com/nod-ai/amd-shark-ai)
 
-**Based on 629 review comments across 58 PRs**
+**Based on 684 review comments across 72 PRs**
 
-**Generated:** 2026-03-05
+**Generated:** 2026-05-05
 
 ---
 
@@ -196,6 +196,29 @@
   ```
 
 ### Python Patterns
+- **Use the walrus operator** for parent traversal patterns:
+  ```python
+  # Good - concise with walrus operator
+  op = root_op
+  while op := root_op.parent:
+      if isinstance(op.opview, func.FuncOp):
+          return ir.StringAttr(op.opview.name).value
+
+  # Avoid - importing private types like _OperationBase
+  ```
+
+- **Return `None` instead of raising** and let the caller decide how to handle missing values
+
+- **Use `enum.IntFlag`** for bit-flag enums that can be combined with `|`:
+  ```python
+  # Good
+  class ConvType(enum.IntFlag):
+      IGEMM = 1
+      DIRECT = 2
+
+  # Then use: ConvType.IGEMM | ConvType.DIRECT
+  ```
+
 - **Use `match` statement** (Python 3.10+) for multiple conditions:
   ```python
   # Good
@@ -279,6 +302,10 @@
   """
   ```
 
+### Test Organization (continued)
+- **Move pytest fixtures to `tests/conftest.py`** instead of test utility modules in source
+- **Keep test utilities under `tests/`** not in main source package
+
 ### Avoiding Mocks
 - **Prefer testable functions over mocks**:
   > "Instead of relying on mocks for this test, could we add a function that takes `candidate_results` and decides which candidates to keep?"
@@ -317,6 +344,16 @@
 - **Functions shouldn't know about concrete types** when abstraction is intended
 - **Don't add target-specific code to abstract base**
 
+### Package Configuration
+- **Use wildcard patterns in pyproject.toml** for package discovery:
+  ```toml
+  # Good - catches future subdirectories
+  packages = ["amdsharktuner*"]
+
+  # Fragile - must update for each new package
+  packages = ["amdsharktuner", "amdsharktuner.rocm", "amdsharktuner.fusilli_tuner"]
+  ```
+
 ### Imports
 - **Combine related imports**:
   ```python
@@ -338,6 +375,14 @@
 - **Use constants directly** instead of creating local variables when it hurts readability
 - **Consider exposing as bindings** instead of duplicating IREE code
 - **Query parent operations properly** - don't assume direct parent is correct type
+- **Avoid unnecessary indirection** - don't create generic-looking functions when logic is very specific; put specialized logic directly where it's used
+- **Prefer automatic decisions over user flags** - if a feature can be decided automatically, don't expose it as a command-line option
+- **Don't hardcode target checks** - use target attributes (e.g., DMA sizes) from bindings instead of hardcoded chip names
+
+### Upstream Alignment
+- **Keep tuner constraints in sync with upstream IREE** - when IREE changes semantics (e.g., dropping `qk_acc == pv_lhs`), update tuner constraints to match
+- **Use derived values, not tunable parameters** for things determined by upstream semantics (e.g., `col_major` is derived from layout reuse, not a free variable)
+- **Simplify z3 variables** when upstream changes make some redundant
 
 ---
 

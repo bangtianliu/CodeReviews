@@ -2,7 +2,1789 @@
 
 **Repository:** iree-org/iree
 
-**Generated:** 2026-03-05
+**Generated:** 2026-05-05
+
+---
+
+## PR #24347: [LLVMGPU] Add TileAndFuse fallback for iree_linalg_ext.arg_compare
+
+**URL:** https://github.com/iree-org/iree/pull/24347
+**State:** OPEN
+
+### Comment by Max191
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/ConfigUtils.cpp`
+
+**Line:** 2117
+
+**Comment:**
+
+I think in this case, you could set the workgroupSize to {1, 1, 1} instead of bailing and going to the other pipeline. If you do that will it compile for these 1D cases?
+
+---
+
+### Comment by Max191
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/ConfigUtils.cpp`
+
+**Line:** 2126
+
+**Comment:**
+
+Minor improvement: If the workgroup tile size computation below yields a cumulative tile size less than or equal to `1 * subgroupSize`, then you could reduce the workgroupSize down to just 1 subgroup after you've computed the workgroup tile sizes.
+
+---
+
+### Comment by bangtianliu
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/ConfigUtils.cpp`
+
+**Line:** 2117
+
+**Comment:**
+
+Let me have a try
+
+---
+
+### Comment by bangtianliu
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/ConfigUtils.cpp`
+
+**Line:** 2117
+
+**Comment:**
+
+Ok, trigger CI error here: https://github.com/iree-org/iree/actions/runs/25334858337/job/74277465143?pr=24347#step:5:11875
+
+ Tried the rank-1 single-thread path, which crashes the realistic CI cases (linalg.fill-seeded outs). The mismatch is between iteration-domain rank and result rank:                                                   
+ 
+ ```mlir                                                                                                                                                                                            
+ // arg_compare: input rank 1, result rank 0 (scalar)                                                                                                                                        
+ %0:2 = iree_linalg_ext.arg_compare
+     {lowering_config = #iree_gpu.lowering_config<{thread = [0], workgroup = [0]}>}                                                                                                            
+     dimension(0) ins(%input : tensor<5xf32>)                                                                                                                                                  
+     outs(%fv, %fi : tensor<f32>, tensor<i32>) ...                                                                                                                                             
+ ```                                                                                                                                                                                    
+ The lowering_config is length-1 (one entry per iteration-domain dim = input rank), but the result is rank-0. `GPUGreedilyDistributeToThreadsPass` walks the result iteration space and indexes the tile array with the result rank, so tile[0] against a rank-0 target overflows -> ArrayRef::operator[] assert.
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/ConfigUtils.cpp`
+
+**Line:** 2086
+
+**Comment:**
+
+this assert is redundant, the cast below already asserts the same condition. See https://llvm.org/docs/ProgrammersManual.html#the-isa-cast-and-dyn-cast-templates
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/ConfigUtils.cpp`
+
+**Line:** 2101
+
+**Comment:**
+
+nit: inline this since there's only one use
+```suggestion
+    return IREE::GPU::LoweringConfigAttr::get(context, b.getDictionaryAttr(attrs));
+```
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/LLVMGPU/Passes.cpp`
+
+**Line:** 582
+
+**Comment:**
+
+Can you add a TODO with the issue URL if you know you will have to eventually remove this option?
+
+---
+
+### Comment by Max191
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/ConfigUtils.cpp`
+
+**Line:** 2117
+
+**Comment:**
+
+Hmm, this seems like a bug in either the tiling interface implementation for arg_compare or in the GPUGreedilyDistributeToThreads pass. The distribution should just operate on the iteration space of the op, which in this case is rank 1, not rank 0. If it is somehow only looking at the result value to determine the iteration space, then that seems wrong to me. I'd think this should behave the same way that a 1D regular reduction op would (I don't know if 1D regular reduction also hits the same failure or not, but just saying that they should kinda be the same).
+
+If we are hitting assertion errors in that pass then it's worth fixing, because this looks like it should be a valid config to me.
+
+---
+
+### Comment by hanhanW
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/Passes.td`
+
+**Line:** 652
+
+**Comment:**
+
+Why do we need this option?
+
+---
+
+### Comment by bangtianliu
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/Passes.td`
+
+**Line:** 652
+
+**Comment:**
+
+Vectorization would produce `iree_vector_ext.arg_compare`, which has no lowering in the TileAndFuse pipeline. We just let it go to `LinalgExtToLoops`, which can handle it automatically along the TileAndFuse pipeline. 
+
+Lowering for `iree_vector_ext.arg_compare` is the trick along VectorDistribute, about some layout, distribution, and dpp + ballot
+
+---
+
+### Comment by hanhanW
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/Passes.td`
+
+**Line:** 652
+
+**Comment:**
+
+Something is missing from mapping the iree_vector_ext.arg_compare to some vector ops, IMO. It is also failing if we switch CPU backend to `LinalgExtTileAndVectorize` pipeline.
+
+VectorDistribution pipeline is a harder one for sure, but the basic vector lowering is missing.
+
+What is the core implementation for `VectorExt::ArgCompareOp`? I wonder why can't we use `LinalgExt::ArgCompareOp` to represent it and we can maybe handle the lowering in LinalgExtToLoops implementation. The `*ToLoops` is the final fallback for scaler code, so it seems better if we can line things up automatically in this context.
+
+---
+
+### Comment by hanhanW
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/Passes.td`
+
+**Line:** 652
+
+**Comment:**
+
+Maybe there are some traits only available in VectorExt dialect, can you provide more context and figure a way for basic plumbing?
+
+---
+
+### Comment by bangtianliu
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/Passes.td`
+
+**Line:** 652
+
+**Comment:**
+
+> Something is missing from mapping the iree_vector_ext.arg_compare to some vector ops, IMO
+
+Along the VectorDistribute pipeline, iree-vector_ext.arg_compare is lowered into gpu.subgroup_reduce + gpu.ballot to leverage DPP and ballot instructions provided by AMDGPU backend. No vector lowering at all. 
+
+Yes, I think for the CPU backend, something is missing here since I did not focus on the CPU part at all 
+
+> Maybe there are some traits only available in VectorExt dialect, can you provide more context and figure a way for basic plumbing
+
+The reason iree_vector_ext.arg_compare exists as a separate op (introduced in #23386) is that its operands and results are typed `vector<...>` rather than `tensor<...>`, and it carries the layout/distribution traits the VectorDistribute needs.
+
+---
+
+### Comment by bangtianliu
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/Passes.td`
+
+**Line:** 652
+
+**Comment:**
+
+A basic plumbing is missing there, like add a generic lowering of iree_vector_ext.arg_compare into vector.* ops which will unblock CPU or any GPU backends that do not have AMDGPU ballot or DPP instruction
+
+---
+
+### Comment by bangtianliu
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/Passes.td`
+
+**Line:** 652
+
+**Comment:**
+
+I can add this basic plumbing to my plate, too.
+
+---
+
+### Comment by bangtianliu
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/ConfigUtils.cpp`
+
+**Line:** 2117
+
+**Comment:**
+
+Fixed in the latest commit, added a loopRanges.empty() early-return in `getVectorTileSizesFromLoopRanges ` which is used in GPUGreedilyDistributeToThreads pass
+
+---
+
+## PR #24346: [Experimental][Do not review] Relax reduction kernel-config alignment for VectorDistribute
+
+**URL:** https://github.com/iree-org/iree/pull/24346
+**State:** OPEN
+
+(No review comments)
+
+---
+
+## PR #24317: [LinalgExt] Fix ArgCompareOp::generateResultTileValue for producer fusion
+
+**URL:** https://github.com/iree-org/iree/pull/24317
+**State:** MERGED
+
+### Comment by hanhanW
+
+**File:** `compiler/src/iree/compiler/Dialect/LinalgExt/IR/TilingInterfaceImpl.cpp`
+
+**Line:** 1959
+
+**Comment:**
+
+minor optional nit: I believe that the compiler is doing good on this optimization, but I think having `zeroIdx` var still make it cleaner.
+
+---
+
+## PR #24291: [InputConversion] Lower AtenArgmax/AtenArgmin to iree_linalg_ext.arg_compare
+
+**URL:** https://github.com/iree-org/iree/pull/24291
+**State:** OPEN
+
+(No review comments)
+
+---
+
+## PR #24252: [Python] Fix duplicate enum builder registrations in Python bindings
+
+**URL:** https://github.com/iree-org/iree/pull/24252
+**State:** MERGED
+
+(No review comments)
+
+---
+
+## PR #24223: [LinalgExt] Add OuterReduction tiling strategy for TopkV2Op
+
+**URL:** https://github.com/iree-org/iree/pull/24223
+**State:** OPEN
+
+(No review comments)
+
+---
+
+## PR #24202: [LinalgExt] Add e2e tests for TopkV2Op
+
+**URL:** https://github.com/iree-org/iree/pull/24202
+**State:** MERGED
+
+(No review comments)
+
+---
+
+## PR #24173: [LinalgExt] Add IndexingMapOpInterface to ArgCompareOp
+
+**URL:** https://github.com/iree-org/iree/pull/24173
+**State:** MERGED
+
+### Comment by Groverkss
+
+**File:** `compiler/src/iree/compiler/Dialect/LinalgExt/IR/LinalgExtOps.cpp`
+
+**Line:** 1621
+
+**Comment:**
+
+nit: don't use auto
+
+---
+
+### Comment by Groverkss
+
+**File:** `compiler/src/iree/compiler/Dialect/LinalgExt/IR/LinalgExtOps.cpp`
+
+**Line:** 1627
+
+**Comment:**
+
+nit don't use auto
+
+---
+
+## PR #24147: [LinalgExt] Verify input/output indices element types match in topk_v2
+
+**URL:** https://github.com/iree-org/iree/pull/24147
+**State:** MERGED
+
+(No review comments)
+
+---
+
+## PR #24146: [LinalgExt] Add scalar implementation for TopkV2Op
+
+**URL:** https://github.com/iree-org/iree/pull/24146
+**State:** MERGED
+
+### Comment by hanhanW
+
+**File:** `compiler/src/iree/compiler/Dialect/LinalgExt/IR/TilingInterfaceImpl.cpp`
+
+**Line:** 925
+
+**Comment:**
+
+Spell out the type
+
+---
+
+### Comment by hanhanW
+
+**File:** `compiler/src/iree/compiler/Dialect/LinalgExt/IR/TilingInterfaceImpl.cpp`
+
+**Line:** 921
+
+**Comment:**
+
+nit: avoid `unsigned` unless you have a reason.
+
+https://google.github.io/styleguide/cppguide.html#Integer_Types
+
+> Unsigned integers are good for representing bitfields and modular arithmetic. Because of historical accident, the C++ standard also uses unsigned integers to represent the size of containers - many members of the standards body believe this to be a mistake, but it is effectively impossible to fix at this point. The fact that unsigned arithmetic doesn't model the behavior of a simple integer, but is instead defined by the standard to model modular arithmetic (wrapping around on overflow/underflow), means that a significant class of bugs cannot be diagnosed by the compiler. In other cases, the defined behavior impedes optimization.
+
+> That said, mixing signedness of integer types is responsible for an equally large class of problems. The best advice we can provide: try to use iterators and containers rather than pointers and sizes, try not to mix signedness, and try to avoid unsigned types (except for representing bitfields or modular arithmetic). Do not use an unsigned type merely to assert that a variable is non-negative.
+
+---
+
+### Comment by hanhanW
+
+**File:** `compiler/src/iree/compiler/Dialect/LinalgExt/IR/TilingInterfaceImpl.cpp`
+
+**Line:** 973
+
+**Comment:**
+
+`J`, `J1`, `vJ`, `vJ1`, they are all bad names.. I think what we can do is documents a bit and use `lhs` and `rhs`. WDYT?
+
+---
+
+### Comment by hanhanW
+
+**File:** `compiler/src/iree/compiler/Dialect/LinalgExt/IR/TilingInterfaceImpl.cpp`
+
+**Line:** 955
+
+**Comment:**
+
+Can this just be `sortMap.map(cmpBlock.getArguments(), cmpArgs);`?
+
+---
+
+### Comment by hanhanW
+
+**File:** `compiler/src/iree/compiler/Dialect/LinalgExt/IR/TilingInterfaceImpl.cpp`
+
+**Line:** 1703
+
+**Comment:**
+
+ditto, do you need the loop?
+
+---
+
+### Comment by hanhanW
+
+**File:** `compiler/src/iree/compiler/Dialect/LinalgExt/IR/TilingInterfaceImpl.cpp`
+
+**Line:** 1699
+
+**Comment:**
+
+See https://abseil.io/tips/88 and https://llvm.org/docs/CodingStandards.html#do-not-use-braced-initializer-lists-to-call-a-constructor
+
+```suggestion
+      SmallVector<Value> reverseValues = {kValue, loopCarryValues[0]};
+```
+
+---
+
+### Comment by hanhanW
+
+**File:** `compiler/src/iree/compiler/Dialect/LinalgExt/IR/TilingInterfaceImpl.cpp`
+
+**Line:** 1753
+
+**Comment:**
+
+I'm wondering why this is outside the scf.for creation? Is there any reason?
+
+---
+
+### Comment by bangtianliu
+
+**File:** `compiler/src/iree/compiler/Dialect/LinalgExt/IR/TilingInterfaceImpl.cpp`
+
+**Line:** 1699
+
+**Comment:**
+
+TIL
+
+---
+
+### Comment by bangtianliu
+
+**File:** `compiler/src/iree/compiler/Dialect/LinalgExt/IR/TilingInterfaceImpl.cpp`
+
+**Line:** 1753
+
+**Comment:**
+
+Just followed the style of TopkOp previously, I will apply your suggestion.
+
+---
+
+### Comment by hanhanW
+
+**File:** `compiler/src/iree/compiler/Dialect/LinalgExt/IR/TilingInterfaceImpl.cpp`
+
+**Line:** 1753
+
+**Comment:**
+
+I see, thanks!
+
+---
+
+## PR #24129: [LinalgExt] Add TilingInterface support for TopkV2Op
+
+**URL:** https://github.com/iree-org/iree/pull/24129
+**State:** MERGED
+
+### Comment by hanhanW
+
+**File:** `compiler/src/iree/compiler/Dialect/LinalgExt/IR/TilingInterfaceImpl.cpp`
+
+**Line:** 1603
+
+**Comment:**
+
+We should consider using it in both new top_k and sort op. They all use bubble sorts.
+
+---
+
+### Comment by hanhanW
+
+**File:** `compiler/src/iree/compiler/Codegen/Interfaces/PartitionableLoopsInterface.cpp`
+
+**Line:** 287
+
+**Comment:**
+
+It's better to add this with an e2e test. Otherwise, this is a dead code.
+
+---
+
+### Comment by bangtianliu
+
+**File:** `compiler/src/iree/compiler/Codegen/Interfaces/PartitionableLoopsInterface.cpp`
+
+**Line:** 287
+
+**Comment:**
+
+Yes I will move it to e2e test PR
+
+---
+
+### Comment by hanhanW
+
+**File:** `compiler/src/iree/compiler/Dialect/LinalgExt/IR/TilingInterfaceImpl.cpp`
+
+**Line:** 1795
+
+**Comment:**
+
+I feel that you are "borrowing" the old structure from TopK implementation, but we really don't need these nesting.. Can you drop them..
+
+---
+
+### Comment by hanhanW
+
+**File:** `compiler/src/iree/compiler/Dialect/LinalgExt/IR/TilingInterfaceImpl.cpp`
+
+**Line:** 1832
+
+**Comment:**
+
+I thought it is just `tiledOperands[1]`, instead of the complex computation? This is op sementics, right?
+
+---
+
+### Comment by hanhanW
+
+**File:** `compiler/src/iree/compiler/Dialect/LinalgExt/IR/TilingInterfaceImpl.cpp`
+
+**Line:** 1810
+
+**Comment:**
+
+This is better, thanks.
+
+---
+
+## PR #24095: [LinalgExt] Move ArgCompareOp region verification to verifyRegions
+
+**URL:** https://github.com/iree-org/iree/pull/24095
+**State:** MERGED
+
+(No review comments)
+
+---
+
+## PR #24054: [LinalgExt] Add topk_v2 op with roundtrip and invalid mlir test
+
+**URL:** https://github.com/iree-org/iree/pull/24054
+**State:** MERGED
+
+### Comment by MaheshRavishankar
+
+**File:** `compiler/src/iree/compiler/Dialect/LinalgExt/IR/LinalgExtOps.td`
+
+**Line:** 700
+
+**Comment:**
+
+Are we doing two operations in one here? It seems like the basic algorithm for top_k and full sort should be very different? I know top_k == input dimension effectively gives you sort, but top_k just needs top_k values. Do those need to be sorted too?
+
+---
+
+### Comment by MaheshRavishankar
+
+**File:** `compiler/src/iree/compiler/Dialect/LinalgExt/IR/LinalgExtOps.td`
+
+**Line:** 701
+
+**Comment:**
+
+I am not sure I follow what `input indices` are?
+
+---
+
+### Comment by MaheshRavishankar
+
+**File:** `compiler/src/iree/compiler/Dialect/LinalgExt/IR/LinalgExtOps.td`
+
+**Line:** 717
+
+**Comment:**
+
+Nit: can we keep the order of operands consistent with the order they appear in the assembly format below? Change the assembly format if you need to.
+
+---
+
+### Comment by bangtianliu
+
+**File:** `compiler/src/iree/compiler/Dialect/LinalgExt/IR/LinalgExtOps.td`
+
+**Line:** 701
+
+**Comment:**
+
+It is needed for partial reduction (split reduction). Same semantics as the existing TopkOp's optional indices operand.
+
+---
+
+### Comment by hanhanW
+
+**File:** `compiler/src/iree/compiler/Dialect/LinalgExt/IR/LinalgExtOps.td`
+
+**Line:** 704
+
+**Comment:**
+
+```suggestion
+    Accepts a single N-D input tensor of values and an optional N-D tensor of
+    input indices (any integer type). If input indices aren't provided, the
+    index mapping is inferred based on the sort dimension (i.e., `[0, N)`). Produces output
+    values and optionally output indices (integer type) tracking original
+    positions.
+```
+
+A couple questions:
+
+1. What does it mena when input indices is passed but not output indices? Should we deny the case?
+2. If input indices aren't provided, `[0, N)` is inferred, right? How about adding it to the doc?
+
+---
+
+### Comment by hanhanW
+
+**File:** `compiler/src/iree/compiler/Dialect/LinalgExt/IR/LinalgExtOps.cpp`
+
+**Line:** 1350
+
+**Comment:**
+
+nit: avoid double negation.
+
+```suggestion
+  if (ShapedType::isStatic(inputDimSize) &&
+      ShapedType::isStatic(outputDimSize)) {
+```
+
+---
+
+### Comment by hanhanW
+
+**File:** `compiler/src/iree/compiler/Dialect/LinalgExt/IR/LinalgExtOps.cpp`
+
+**Line:** 1378
+
+**Comment:**
+
+This seems to belong `verifyRegions` check, then you can use `cast` instead of `dyn_cast`. I learned it from @sommerlukas early this year: https://github.com/iree-org/iree/commit/7553f058e042080ae050d34cc42848d8a13c5c7c
+
+---
+
+### Comment by hanhanW
+
+**File:** `compiler/src/iree/compiler/Dialect/LinalgExt/IR/LinalgExtOps.cpp`
+
+**Line:** 1344
+
+**Comment:**
+
+Having complex lambda in if statement is usually hard to read the code. And the code will be mutated easily when people update the code, because of formatting. How about just converting it to a loop? E.g.,
+
+```cpp
+  uint64_t dim = getDimension();
+  for (auto [idx, inDim, outDim] : llvm::enumerate(
+           inputValuesType.getShape(), outputValuesType.getShape())) {
+    if (idx == dim) {
+      continue;
+    }
+    if (failed(verifyCompatibleShape(inDim, outDim))) {
+      return op->emitOpError("incompatible input/output shapes");
+    }
+  }
+```
+
+In this case, you can also signal which dimension is problematic.
+
+---
+
+### Comment by bangtianliu
+
+**File:** `compiler/src/iree/compiler/Dialect/LinalgExt/IR/LinalgExtOps.td`
+
+**Line:** 704
+
+**Comment:**
+
+Good catch! Say yes to both the two Qs, and will apply the changes.
+
+---
+
+### Comment by bangtianliu
+
+**File:** `compiler/src/iree/compiler/Dialect/LinalgExt/IR/LinalgExtOps.cpp`
+
+**Line:** 1378
+
+**Comment:**
+
+TIL
+
+---
+
+## PR #24015: [Codegen][GPU] Use gpu::AddressSpace::Constant for constants
+
+**URL:** https://github.com/iree-org/iree/pull/24015
+**State:** MERGED
+
+(No review comments)
+
+---
+
+## PR #24003: [Codegen][GPU] Add kernel config for ArgCompareOp with VectorDistribute pipeline
+
+**URL:** https://github.com/iree-org/iree/pull/24003
+**State:** MERGED
+
+### Comment by Groverkss
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/ReductionConfigUtils.cpp`
+
+**Line:** 394
+
+**Comment:**
+
+Can we preserve these comments?
+
+---
+
+### Comment by Groverkss
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/ReductionConfigUtils.cpp`
+
+**Line:** 407
+
+**Comment:**
+
+preserve comments
+
+---
+
+### Comment by Groverkss
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/ReductionConfigUtils.cpp`
+
+**Line:** 426
+
+**Comment:**
+
+preserve comments
+
+---
+
+### Comment by Groverkss
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/ReductionConfigUtils.cpp`
+
+**Line:** 562
+
+**Comment:**
+
+preserve please
+
+---
+
+### Comment by Groverkss
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/ReductionConfigUtils.cpp`
+
+**Line:** 648
+
+**Comment:**
+
+Why doesn't arg_compare have an index for index_base?
+
+---
+
+### Comment by Groverkss
+
+**File:** `compiler/src/iree/compiler/Codegen/LLVMGPU/test/ROCDL/pipeline_argcompare_vector_distribute.mlir`
+
+**Line:** 37
+
+**Comment:**
+
+Do we need hal.executable stuff for pipeline tests now? I think Hanhan did some simplifications. If other pipeline tests are like this, it is okay.
+
+---
+
+### Comment by Groverkss
+
+**File:** `compiler/src/iree/compiler/Codegen/LLVMGPU/KernelConfig.cpp`
+
+**Line:** 2499
+
+**Comment:**
+
+hmm okay to do now, but eventually we should just move it in the case above.
+
+---
+
+### Comment by bangtianliu
+
+**File:** `compiler/src/iree/compiler/Codegen/LLVMGPU/test/ROCDL/pipeline_argcompare_vector_distribute.mlir`
+
+**Line:** 37
+
+**Comment:**
+
+Checked existing pipeline tests (pipeline_vector_distribute_gfx942.mlir, etc.), and they all use the hal.executable wrapping with the same pass-pipeline format. Kept consistent with those.
+
+---
+
+### Comment by bangtianliu
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/ReductionConfigUtils.cpp`
+
+**Line:** 648
+
+**Comment:**
+
+index_base is an optional scalar Index operand (not a shaped tensor), so affine indexing maps don't apply to it.
+
+---
+
+### Comment by hanhanW
+
+**File:** `compiler/src/iree/compiler/Codegen/LLVMGPU/test/ROCDL/pipeline_argcompare_vector_distribute.mlir`
+
+**Line:** 2
+
+**Comment:**
+
+You should use `--iree-codegen-llvmgpu-rocdl-lowering-pipeline` in the future. I'll prepare a patch for fixing it.
+
+---
+
+### Comment by bangtianliu
+
+**File:** `compiler/src/iree/compiler/Codegen/LLVMGPU/test/ROCDL/pipeline_argcompare_vector_distribute.mlir`
+
+**Line:** 2
+
+**Comment:**
+
+Thanks
+
+---
+
+## PR #23978: [Codegen][GPU] Use gpu::AddressSpace::Global for constants
+
+**URL:** https://github.com/iree-org/iree/pull/23978
+**State:** MERGED
+
+### Comment by krzysz00
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/IREEComprehensiveBufferize.cpp`
+
+**Line:** 312
+
+**Comment:**
+
+Tempted to suggest that we go to the generality of teaching `ExecutableTargetAttr` to `getConstantMemorySpace()` but that can be future work
+
+---
+
+## PR #23916: [DispatchCreation] Dynamic selection of split reduction target tile size for outer reductions with fix
+
+**URL:** https://github.com/iree-org/iree/pull/23916
+**State:** MERGED
+
+(No review comments)
+
+---
+
+## PR #23913: [CI] Move torch tests to presubmit
+
+**URL:** https://github.com/iree-org/iree/pull/23913
+**State:** MERGED
+
+(No review comments)
+
+---
+
+## PR #23868: [Codegen][CAPI] Fix C API assertion for GPU pipeline attributes in TranslationInfoAttr
+
+**URL:** https://github.com/iree-org/iree/pull/23868
+**State:** MERGED
+
+(No review comments)
+
+---
+
+## PR #23847: [Codegen][GPU] Add iree_gpu.arg_compare operation
+
+**URL:** https://github.com/iree-org/iree/pull/23847
+**State:** CLOSED
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/IR/IREEGPUOps.td`
+
+**Line:** 449
+
+**Comment:**
+
+This is identical to https://github.com/iree-org/iree/blob/6f5a868644daf3ae22215732168ff500ef5b5545/compiler/src/iree/compiler/Codegen/Dialect/VectorExt/IR/VectorExtOps.td#L442-L454
+
+---
+
+## PR #23793: [Codegen][GPU] Add DistributeArgCompare pattern
+
+**URL:** https://github.com/iree-org/iree/pull/23793
+**State:** MERGED
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1582
+
+**Comment:**
+
+Nit: I think it would be nicer to keep the same order of checks for `initIndex` (first layout, then bitwidth).
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1630
+
+**Comment:**
+
+Why do we only need to expand to rank 5 and not rank 6 here?
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1630
+
+**Comment:**
+
+Is this comment duplicated with the one below?
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1675
+
+**Comment:**
+
+Use `continue` instead of `else`.
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1726
+
+**Comment:**
+
+I think we should check invariants for this pattern before creating IR in the step before.
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1738
+
+**Comment:**
+
+Nit: Use `llvm::append_range`.
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1759
+
+**Comment:**
+
+Is this comment accurate? Shouldn't this be `1` instead of `batch1` and `outer1`?
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1804
+
+**Comment:**
+
+```suggestion
+      } else {
+```
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1843
+
+**Comment:**
+
+Nit/personal taste: `doCrossThreadReduction` might be more descriptive for the purpose of this function.
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/test/gpu_nested_layout_vector_distribution_argcompare.mlir`
+
+**Line:** 1
+
+**Comment:**
+
+The tests don't capture the dataflow between the operations, which could lead to them producing false matches and also makes it hard to follow the expected output.
+
+---
+
+### Comment by bangtianliu
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1630
+
+**Comment:**
+
+Because element[reductionDim] is the dimension we're about to reduce, I will update the comment to make it clear.
+
+---
+
+### Comment by bangtianliu
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1843
+
+**Comment:**
+
+The current name `doThreadReduction `is consistent with the naming in `DistributeMultiReduction `which also uses similar terminology.
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1002
+
+**Comment:**
+
+Should we assert here that `lhs` and `rhs` have the same type?
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1039
+
+**Comment:**
+
+Nit: The comment isn't quite accurate, as we don't check for a comparison, we only check that there is a defining operation.
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1651
+
+**Comment:**
+
+Do we need to construct this or can we just take it from the other operands distributed shape (and drop the reduction dim if necessary)?
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1694
+
+**Comment:**
+
+Nit: We repeatedly use `disInitValue3.getType().getElementType()`, maybe makes sense to store it in some variable.
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 2031
+
+**Comment:**
+
+```suggestion
+      // For simple comparators, reducedValue is already the correct result.
+      Value resultValue = reducedValue;
+      if (analysis.transformOp) {
+        // Must broadcast original value from winning lane.
+        resultValue =
+            gpu::ShuffleOp::create(rewriter, loc, localValue, winningLane,
+                                   subgroupSizeVal, gpu::ShuffleMode::IDX)
+                .getShuffleResult();
+      } 
+```
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 2063
+
+**Comment:**
+
+If it's similar to `multi_reduction`, can we share any helpers?
+
+---
+
+### Comment by bangtianliu
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1002
+
+**Comment:**
+
+the `arith.cmpf` and `arith.cmpi` verifiers will catch any type mismatch.
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 978
+
+**Comment:**
+
+Is this the best approach to solve this issue? If the `ToSIMD` is no-op/identity in those cases, can't we have a pattern that removes them instead of putting the burden on potentially multiple different distribution patterns?
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 996
+
+**Comment:**
+
+Use early return instead of `else`.
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1669
+
+**Comment:**
+
+Could we insert a `vector.step` operation here instead and distribute that afterwards?
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1846
+
+**Comment:**
+
+```suggestion
+    VectorValue localValueResult = disValue;
+    VectorValue localIndexResult = disIndex;
+    if(elementTile > 1) {
+      auto localReduced = doLocalArgCompareReduction(
+          rewriter, loc, disValue, cast<VectorValue>(disIndex), disInitValue,
+          disInitIndex, argCompareOp.getRegion(), distributedReductionDim);
+      if (failed(localReduced)) {
+        return rewriter.notifyMatchFailure(
+            argCompareOp,
+            "failed to perform local element reduction for arg_compare");
+      }
+      localValueResult = localReduced->first;
+      localIndexResult = localReduced->second;
+    }
+    // Collapse unit dimensions inserted for reduction.
+    localValueResult = cast<VectorValue>(
+        vector::ShapeCastOp::create(rewriter, loc, resultValueDistType,
+                                    localValueResult)
+            .getResult());
+    localIndexResult = cast<VectorValue>(
+        vector::ShapeCastOp::create(rewriter, loc, resultIndexDistType,
+                                    localIndexResult)
+            .getResult());
+```
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1846
+
+**Comment:**
+
+You could also move the special treatment for `elementTile == 1` into `doLocalArgCompareReduction` instead.
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 2320
+
+**Comment:**
+
+It it's the same as in `DistributeMultiReduction`, can we have a shared helper?
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 2450
+
+**Comment:**
+
+It it's the same as in `DistributeMultiReduction`, can we have a shared helper?
+
+---
+
+### Comment by Groverkss
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 978
+
+**Comment:**
+
++1 something seems wrong if you have to do this.
+
+---
+
+### Comment by Groverkss
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1669
+
+**Comment:**
+
++1, also does not having an index vector actually give us something? If not, can we just remove the "implicit" index vector behavior from arg_compare?
+
+To start, using vector.step and setting redistribute on it would be okay. But we should add a TODO that we should remove the implicit index vector behavior if it doesn't give us anything.
+
+---
+
+### Comment by Groverkss
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1828
+
+**Comment:**
+
+Don't special case for these cases. Canonicalization should just fold these later on. It just adds more pathways we have to test and maintain.
+
+---
+
+### Comment by Groverkss
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1846
+
+**Comment:**
+
+We should remove special treatments like this.
+
+---
+
+### Comment by Groverkss
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 2022
+
+**Comment:**
+
+Can we share this implementation with vector.multi_reduction thread distribution? My understanding is that the only thing arg_compare and multi_reduction should differ in is the "combiner" function. We could have some free functions that take the combiner function as a lambda and just perform the thread reduce and subgroup reduce. For local reduction, you just apply the combiner function directly.
+
+To be more concrete, I'm thinking of something like a parent pattern DistributeReduction or something that takes a lambda combiner as an input to the constructor and uses it to do reductions.
+
+---
+
+### Comment by bangtianliu
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1669
+
+**Comment:**
+
+Yes, it is only about the explicit index model.
+
+---
+
+### Comment by bangtianliu
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 2022
+
+**Comment:**
+
+> Can we share this implementation with vector.multi_reduction thread distribution? 
+
+multi_reduction does makeArithReduction(kind, val, shuffledVal) ==> single Value. arg_compare does compare(val, shuffledVal) then select on both value and index ==> (Value, Value).
+
+We have two versions of implementations to switch: 1) shuffle version for custom unsupported comparator region, 2) multi_reduction + gpu.ballot to handle argmax/argmin.  
+
+> To be more concrete, I'm thinking of something like a parent pattern DistributeReduction
+
+It's doable, but let's explore one separate PR: perhaps a DistributeReductionBase that parameterizes over the combiner and the number of tracked quantities. I've left a TODO comment on `doThreadReduction `for this.
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 944
+
+**Comment:**
+
+Nit: The name is quite similar to the function below, but they do different things. Maybe we can change both names to incorporate what they do.
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 974
+
+**Comment:**
+
+Nit: The processing of value and index seems quite independent here. Wouldn't it be simpler to have this function more generic to process only one `VectorValue` and instead call it twice for value and index separately?
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1185
+
+**Comment:**
+
+For what do we need the `to_vector_of` here and in the following lines?
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1241
+
+**Comment:**
+
+Same question as above about `to_vector_of`.
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1651
+
+**Comment:**
+
+Does `getDistributed` above create IR? If so, I'd prefer to move this check & failure before that.
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1667
+
+**Comment:**
+
+Nit, same below.
+```suggestion
+    } 
+    if (auto toSIMD =
+```
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1720
+
+**Comment:**
+
+Nit or personal taste: The function is called `analyzeComparatorForSubgroupReduce` and then we call `doThreadReduction`. Maybe `analyzeComparatorForThreadReduction` would be better?
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1763
+
+**Comment:**
+
+Can this really happen in a well-formed IR? Should this be an assertion instead?
+
+---
+
+### Comment by bangtianliu
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1667
+
+**Comment:**
+
+The else if is intentional here:  without it, a non-zero-rank value that also happens to be defined by ToSIMDOp would hit both branches, with the second overwriting the getDistributed result. Added code comment for it.
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 2178
+
+**Comment:**
+
+Is zero the correct neutral element for the reduction in all cases?
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 2171
+
+**Comment:**
+
+@Groverkss I wonder if we should land https://github.com/iree-org/iree/pull/23613 after all if we create new `create_mask` operations during distribution that have to be distributed, too.
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1844
+
+**Comment:**
+
+We could avoid passing around the `FlattenedReductionState` struct if we make `doThreadReductionWith[Shuffles|Ballot]` members of that struct, so they can access the members. 
+
+It's probably still small enough that it doesn't matter much and the current implementation is fine, so just an idea.
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1167
+
+**Comment:**
+
+I think this comment should be attached to `struct DistributeMultiReduction`.
+
+---
+
+### Comment by bangtianliu
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 2178
+
+**Comment:**
+
+No, I kept this in mind but just forgot to make the changes
+
+---
+
+### Comment by bangtianliu
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 2178
+
+**Comment:**
+
+Thanks for catching it
+
+---
+
+### Comment by Groverkss
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 2171
+
+**Comment:**
+
+Wait why do we do this. We should remove this.
+
+---
+
+### Comment by bangtianliu
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 2171
+
+**Comment:**
+
+Removed. FYI, this mimicked the pattern in DistributeMultiReduction::doSubgroupReductionFromBuffer, which also creates a create_mask with inBounds all-true. Is the mask redundant there as well? If so, I'd be happy to clean that up in a follow-up.
+
+---
+
+## PR #23775: [Codegen] Fix ArgCompare vectorization
+
+**URL:** https://github.com/iree-org/iree/pull/23775
+**State:** MERGED
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/test/generic_vectorization.mlir`
+
+**Line:** 1018
+
+**Comment:**
+
+nit: the formatting here is quite unusual
+also in the other test function
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GenericVectorization.cpp`
+
+**Line:** 124
+
+**Comment:**
+
+to_vector
+
+---
+
+### Comment by hanhanW
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GenericVectorization.cpp`
+
+**Line:** 121
+
+**Comment:**
+
+It'd be a bit confused if people  do not see the patch and read the code directly. Maybe just say that `Use input shape because it contains the full iteration space information, including the reduction dimension, for vectorization`.
+
+---
+
+### Comment by hanhanW
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GenericVectorization.cpp`
+
+**Line:** 124
+
+**Comment:**
+
+Shouldn't it infer the shape from the input operand?
+
+---
+
+### Comment by bangtianliu
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GenericVectorization.cpp`
+
+**Line:** 124
+
+**Comment:**
+
+Sure, it will be more consistent.
+
+---
+
+## PR #23757: [Codegen][Tuner] Add col_major parameter to MMAAttr/VirtualMMAAttr Python binding
+
+**URL:** https://github.com/iree-org/iree/pull/23757
+**State:** MERGED
+
+(No review comments)
+
+---
+
+## PR #23693: [Codegen][LLVMGPU] Add layout support for ArgCompare operations
+
+**URL:** https://github.com/iree-org/iree/pull/23693
+**State:** MERGED
+
+### Comment by Max191
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/VectorLayoutAnalysis.cpp`
+
+**Line:** 292
+
+**Comment:**
+
+Weird edge case: Couldn't the init value and init index technically be the same tensor? I highly doubt there would ever be an arg_compare like that, but just for completeness, should we remove the continues in these init cases and put the continue at the end of the containing `if (auto argCompare = dyn_cast<ArgCompareOp>(user)) {` instead?
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/test/vector_layout_analysis.mlir`
+
+**Line:** 1005
+
+**Comment:**
+
+Does this test actually check the backward propagation of `arg_compare`? We only check the result of `arg_compare` itself, which receives its layout directly from `to_layout`. I think to test the backpropagation through `arg_compare`, there would need to be another operation before `arg_compare` whose results we can check for a layout being propagated through `arg_compare`.
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/test/vector_layout_analysis.mlir`
+
+**Line:** 1031
+
+**Comment:**
+
+I'm not sure how much value this test adds. AFAICT, the propagation through `arg_compare` is the same as for the forward propagation test above and propagation for `scf.for` to its results is tested elsewhere already.
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/test/vector_layout_analysis.mlir`
+
+**Line:** 1083
+
+**Comment:**
+
+Above you said that we can only test one remark per line/location, what is different here that we can test both remarks?
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/test/vector_layout_analysis.mlir`
+
+**Line:** 972
+
+**Comment:**
+
+Ultra-nit: This test uses `verify-diagnostics`, not `FileCheck`.
+
+---
+
+### Comment by bangtianliu
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/test/vector_layout_analysis.mlir`
+
+**Line:** 1031
+
+**Comment:**
+
+Ok, removed the @argcompare_scf_for_propagation test entirely.
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/test/vector_layout_analysis.mlir`
+
+**Line:** 1052
+
+**Comment:**
+
+The check lines do not check the actual value of the layout element tile.
+
+---
+
+### Comment by sommerlukas
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/test/vector_layout_analysis.mlir`
+
+**Line:** 975
+
+**Comment:**
+
+The check lines don't check for the actual layout element tile size.
+
+---
+
+### Comment by Groverkss
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/VectorLayoutAnalysis.cpp`
+
+**Line:** 275
+
+**Comment:**
+
+I don't think other operations add this debug print, can we remove it?
+
+---
+
+### Comment by Groverkss
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/VectorLayoutAnalysis.cpp`
+
+**Line:** 292
+
+**Comment:**
+
+Why do we have the same condition twice?
+
+---
+
+### Comment by Groverkss
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/VectorLayoutAnalysis.cpp`
+
+**Line:** 292
+
+**Comment:**
+
+Oh its not the same thing, I see.
 
 ---
 
