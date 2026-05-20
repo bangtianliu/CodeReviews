@@ -18980,3 +18980,1347 @@ no else after return: https://www.llvm.org/docs/CodingStandards.html#don-t-use-e
 
 **Total PRs with comments:** 79
 **Total comments:** 1248
+
+
+---
+
+# Additional Reviews by Jakub Kuderski (kuhar)
+**Fetched:** 2026-05-20
+**Scope:** Any iree-org/iree PR where kuhar reviewed, comments since 2026-05-05.
+
+---
+
+## PR #24499: [ROCM][Codegen] Add experimental amdgcn SPIR-V path
+
+**Author:** lua1235
+**URL:** https://github.com/iree-org/iree/pull/24499
+**State:** OPEN
+
+### Review Summary by kuhar (APPROVED)
+
+**Comment:**
+
+Just two minor issues to fix before landing. LGTM otherwise.
+
+---
+
+### Comment by kuhar
+
+**File:** `build_tools/linters/typos.toml`
+
+**Line:** 87
+
+**Comment:**
+
+Undo this?
+
+---
+
+### Comment by kuhar (reply)
+
+**File:** `compiler/plugins/target/ROCM/ROCMTarget.cpp`
+
+**Line:** 69
+
+**Comment:**
+
+Oh, we drop this and see if it works now
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/plugins/target/ROCM/ROCMTarget.cpp`
+
+**Line:** 74
+
+**Comment:**
+
+Can we move it to an mlir pass instead? It's much easier to test this way
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/plugins/target/ROCM/ROCMTarget.cpp`
+
+**Line:** 300
+
+**Comment:**
+
+We don't need the iree-hip flag -- iree-rocm is sufficient
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/LLVMGPU/ROCDLPasses.td`
+
+**Line:** 85
+
+**Comment:**
+
+Is this description up to date?
+
+---
+
+## PR #24484: [Codegen] Add v0 VectorDistribute constraints for mamtul
+
+**Author:** RattataKing
+**URL:** https://github.com/iree-org/iree/pull/24484
+**State:** MERGED
+
+### Review Summary by kuhar (CHANGES_REQUESTED)
+
+**Comment:**
+
+I don't understand why we lost so much test coverage
+
+---
+
+### Review Summary by kuhar (COMMENTED)
+
+**Comment:**
+
+Core constraint generation looks fine, but we need to ensure test coverage
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/test/insert_smt_constraints.mlir`
+
+**Line:** 64
+
+**Comment:**
+
+why did you change this?
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/test/verify_smt_constraints_e2e.mlir`
+
+**Line:** 1
+
+**Comment:**
+
+undo this -- we should be using `--verify-diagnostics`
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/LLVMGPU/LLVMGPUConstraintGenerator.cpp`
+
+**Line:** 93
+
+**Comment:**
+
+llvm has a helper for joining string already
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/LLVMGPU/LLVMGPUConstraintGenerator.cpp`
+
+**Line:** 311
+
+**Comment:**
+
+You can have it return `std::tuple<Value, Value, Value>`, since we assume the M, N, K order and this is not exposed to the public API
+
+---
+
+## PR #24471: [Codegen] Add phase group information into a new enum for shared mem info
+
+**Author:** Muzammiluddin-Syed-ECE
+**URL:** https://github.com/iree-org/iree/pull/24471
+**State:** OPEN
+
+### Review Summary by kuhar (COMMENTED)
+
+**Comment:**
+
+Why is the shared mem model so coarse-grained? For example, the number of banks changed between cdna3 and cdna4.
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/IR/IREEGPUEnums.td`
+
+**Line:** 510
+
+**Comment:**
+
+Maybe trim this down and drop cdna1 and rdna1-2, since we don't target these?
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/KnownTargets.cpp`
+
+**Line:** 1203
+
+**Comment:**
+
+Can you rename it to indicate these are *read* phase groups? Writes have their own groups.
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/KnownTargets.cpp`
+
+**Line:** 1214
+
+**Comment:**
+
+I'd do:
+```c++
+if (llvm::is_contained({...}, model)) return 64;
+return 32;
+```
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/KnownTargets.cpp`
+
+**Line:** 1231
+
+**Comment:**
+
+meh, just return 4
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/KnownTargets.cpp`
+
+**Line:** 1232
+
+**Comment:**
+
+return early and no else?
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/unittests/KnownTargetsTest.cpp`
+
+**Line:** 7
+
+**Comment:**
+
+Can we avoid system includes?
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/unittests/KnownTargetsTest.cpp`
+
+**Line:** 33
+
+**Comment:**
+
+This doesn't really test anything -- it says that the constant is whatever the constant is
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/unittests/KnownTargetsTest.cpp`
+
+**Line:** 39
+
+**Comment:**
+
+also here
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/unittests/KnownTargetsTest.cpp`
+
+**Line:** 55
+
+**Comment:**
+
+you can use a for loop
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/unittests/KnownTargetsTest.cpp`
+
+**Line:** 93
+
+**Comment:**
+
+don't use non-ascii characters
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/unittests/KnownTargetsTest.cpp`
+
+**Line:** 132
+
+**Comment:**
+
+use testing::ElementsAreArray and drop SmallVec
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/unittests/KnownTargetsTest.cpp`
+
+**Line:** 136
+
+**Comment:**
+
+you can check for `llvm::all_equal`
+
+---
+
+## PR #24470: [Codegen][Tuner] Materialize constraint assignments in compiler
+
+**Author:** kuhar
+**URL:** https://github.com/iree-org/iree/pull/24470
+**State:** MERGED
+
+### Comment by kuhar (reply)
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/IR/IREEGPUAttrs.cpp`
+
+**Line:** 74
+
+**Comment:**
+
+I feel like this is one of those instances where there might not be a good name 🤷‍♂️  The intention is to detect whether the key belongs do translation info. It's a local function so I'm not too concerned -- the intent is clear based on the local usage.
+
+---
+
+## PR #24434: [Bazel] Add missing loads and glob support for bazel 8+
+
+**Author:** cerisier
+**URL:** https://github.com/iree-org/iree/pull/24434
+**State:** MERGED
+
+### Comment by kuhar
+
+**File:** `llvm-external-projects/iree-dialects/BUILD.bazel`
+
+**Line:** 10
+
+**Comment:**
+
+Why do we need these `allow_empty` throughout this file?
+
+---
+
+### Comment by kuhar (reply)
+
+**File:** `llvm-external-projects/iree-dialects/BUILD.bazel`
+
+**Line:** 10
+
+**Comment:**
+
+Should we drop the whole `exports_files` then?
+
+---
+
+### Comment by kuhar
+
+**File:** `llvm-external-projects/iree-dialects/BUILD.bazel`
+
+**Line:** 242
+
+**Comment:**
+
+Should we drop this if there are no tests?
+
+---
+
+## PR #24432: [Codegen][GPU] Relax 32-bit reduction/arg_compare ceiling for VectorDistribute
+
+**Author:** bangtianliu
+**URL:** https://github.com/iree-org/iree/pull/24432
+**State:** MERGED
+
+### Review Summary by kuhar (COMMENTED)
+
+**Comment:**
+
+I'm not sure we need this new target env entry: IMO every target can be made to support wide subgroup shuffles / reductions, it's just a matter of decomposing them to supported scalars. Instead, I'd prefer to make the lowering work for the remaining targets and then enable unconditionally. WDYT?
+
+---
+
+### Review Summary by kuhar (COMMENTED)
+
+**Comment:**
+
+A few comments
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 1580
+
+**Comment:**
+
+I don't understand the first sentence, I think the grammar is off.
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 2386
+
+**Comment:**
+
+DistributeScan is still on the old `maxBitsPerShuffle` path while reduction and arg_compare now use `targetSupportsShuffleBitwidth`. That leaves AMDGPU 64-bit scan rejected even though the same target accepts 64-bit reduction/arg_compare, and it keeps the `maxBitsPerShuffle` API alive only for scan. Please either migrate scan to the new helper and add a gfx942 f64/i64 scan test, or document and test the intentional carve-out.
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUNestedLayoutDistributionPatterns.cpp`
+
+**Line:** 3433
+
+**Comment:**
+
+This should be
+
+```suggestion
+  patterns.add<DistributeMultiReduction, DistributeArgCompare>(patterns.getContext(), subgroupSize);
+```
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/test/gpu_nested_layout_vector_distribution_argcompare.mlir`
+
+**Line:** 6
+
+**Comment:**
+
+Should we move this to rocdl test then?
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/test/gpu_nested_layout_vector_distribution_argcompare.mlir`
+
+**Line:** 633
+
+**Comment:**
+
+Don't refer to previous / new code -- readers won't know what the timeframe is. Always refer to the current state of the codebase.
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/test/gpu_nested_layout_vector_distribution_multi_reduce.mlir`
+
+**Line:** 3
+
+**Comment:**
+
+We may also want to move these under the rocdl test dir
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/test/gpu_nested_layout_vector_distribution_multi_reduce.mlir`
+
+**Line:** 291
+
+**Comment:**
+
+what makes this reduction global?
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/test/gpu_nested_layout_vector_distribution_multi_reduce.mlir`
+
+**Line:** 327
+
+**Comment:**
+
+also here
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/ReductionConfigUtils.cpp`
+
+**Line:** 805
+
+**Comment:**
+
+No regression test exercises this new divide-by-zero guard. The condition `*bitWidth > largestLoadSizeInBits` only fires when the element is wider than the target's `maxLoadInstructionBits` (128 on gfx942). The new tests in `config_vector_distribute_reduction_gfx942.mlir` go up to i128 (which has `bitWidth == largestLoadSizeInBits`, so `threadLoads = 1` and the loop never divides by zero) -- the actual failure mode that motivated this guard is not tested.
+
+---
+
+### Comment by kuhar (reply)
+
+**File:** `compiler/src/iree/compiler/Codegen/LLVMGPU/test/NVVM/config_vector_distribute_sm80.mlir`
+
+**Line:** 68
+
+**Comment:**
+
+we can implement it too, we even have shared nvidia systems we can test on
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Utils/GPUUtils.cpp`
+
+**Line:** 1331
+
+**Comment:**
+
+Is something like i128 supported today?
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Utils/GPUUtils.h`
+
+**Line:** 27
+
+**Comment:**
+
+This is not true, `gpu.shuffle` is target-agnostic doesn't know what the native bitwidths are.
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Utils/GPUUtils.h`
+
+**Line:** 31
+
+**Comment:**
+
+static is redundant here, `constexpr` variables in the namespace scope are always static
+
+---
+
+### Comment by kuhar
+
+**File:** `tests/e2e/regression/BUILD.bazel`
+
+**Line:** 195
+
+**Comment:**
+
+`--iree-input-demote-f64-to-f32=false` now applies to the entire `check_regression_hip` suite, so unrelated tests also stop exercising the default f64 demotion path. Please put `vector_distribute_64bit_amdgpu.mlir` in its own HIP suite in both BUILD.bazel and CMakeLists.txt, with the demotion flag scoped to that suite only.
+
+---
+
+## PR #24430: [VectorDistribute] Support swizzling in async_dma lowering
+
+**Author:** sommerlukas
+**URL:** https://github.com/iree-org/iree/pull/24430
+**State:** MERGED
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/AMDGPULowerAsyncDMA.cpp`
+
+**Line:** 167
+
+**Comment:**
+
+nit: You could also make it return plain `XORShuffleAttr` and accept that it may be null
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/AMDGPULowerAsyncDMA.cpp`
+
+**Line:** 175
+
+**Comment:**
+
+Why is this double nullable? It could be `non-nullopt` but still `null` if the dyn_cast fails.
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/AMDGPULowerAsyncDMA.cpp`
+
+**Line:** 267
+
+**Comment:**
+
+this may be null
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/AMDGPULowerAsyncDMA.cpp`
+
+**Line:** 323
+
+**Comment:**
+
+```suggestion
+        llvm::Repeated<Value> zeroBase(destRank, c0);
+```
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/AMDGPULowerAsyncDMA.cpp`
+
+**Line:** 341
+
+**Comment:**
+
+nit: continue and no else?
+
+---
+
+## PR #24428: [Codegen][GPU] Phase-aware LDS bank conflict analysis and XOR swizzle search
+
+**Author:** Muzammiluddin-Syed-ECE
+**URL:** https://github.com/iree-org/iree/pull/24428
+**State:** OPEN
+
+### Review Summary by kuhar (COMMENTED)
+
+**Comment:**
+
+Test coverage for the new bank-conflict model is thin: the only behavioral test I see is the existing config_tile_and_fuse_gfx950.mlir BF16-DMA case, whose expected output flipped from 'no swizzle' to xor_shuffle<128,4>. There is no targeted test for getPhaseGroups (the CDNA4 4-phase grouping is a 64-entry magic table -- exactly the kind of thing that wants a unit/lit test that pins the grouping), and no test for the Contiguous model. Please add: (a) a parse/print test for the new lds_bank_phase_model attribute on a non-CDNA4 target (you have a CDNA4 case via target_attrs.mlir), (b) a targeted lowering test where the iterative search picks an XOR swizzle that the old tuned table did not (and vice versa, to catch regressions if the table is ever edited), and (c) a negative test verifying that on a target with phase model None, getXorShuffleParams now returns failure (it does, via hasNoBankConflicts returning failure). Without these, edits to the CDNA4 phase table may break the code without anyone noticing.
+
+---
+
+### Comment by kuhar (reply)
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/IR/IREEGPUAttrs.td`
+
+**Line:** 777
+
+**Comment:**
+
+We call it shared memory across IREE
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/IR/test/target_attrs.mlir`
+
+**Line:** 64
+
+**Comment:**
+
+I'm wondering if we need both or if `lds_model = cdna4` would be enough; conceptually, anything lds-related is a property of the hw generation.
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/ConfigUtils.cpp`
+
+**Line:** 887
+
+**Comment:**
+
+This is the `use_global_load_dma` path, but `useDirectLoad` is left at its default of false. That means the DMA min-access-width constraint (added via `makeXorShuffleDmaConstraintFn`) is not enforced, even though we are explicitly emitting a DMA load. Please pass `/*useDirectLoad=*/true`. Otherwise the search may pick an `accessElems` that is below the DMA load granularity for some intrinsic/element-type combinations, and the constraint added in this very PR is silently unused on the only code path that motivated it (see `TODO(#24255)` above). The companion RHS call below has the same issue, plus is missing `/*isTransposed=*/true` (the call is gated by `transposedRhs`).
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/KnownTargets.cpp`
+
+**Line:** 1185
+
+**Comment:**
+
+IMO both this and the number of threads should be derived from the cdna4 LDS details, not hardcoded separately.
+
+---
+
+### Comment by kuhar (reply)
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/KnownTargets.cpp`
+
+**Line:** 1185
+
+**Comment:**
+
+You can have a default config that only knows the bank width
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/KnownTargets.cpp`
+
+**Line:** 1217
+
+**Comment:**
+
+`getPhaseGroups(CDNA4)` maps every `readBytes > 8` access through the 16-byte `ds_read_b128` phase table. Some scaled-MMA operands have 32-element per-thread accesses; with 8-bit inputs that is 32 bytes, so the analyzer may use the wrong phase schedule. Please either split wider reads into modeled b128 chunks or guard this model to the widths the table actually represents, with coverage for the scaled cases.
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/KnownTargets.cpp`
+
+**Line:** 1226
+
+**Comment:**
+
+This table is the most safety-critical data added by this PR (a single wrong entry produces a model that claims conflict-free for layouts that actually conflict, or vice versa, silently shifting codegen); please cite the specific source. Also please assert `numThreads == 64` (or `<=`?) in the CDNA4 branch (or document the precondition).
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Utils/GPUUtils.cpp`
+
+**Line:** 1023
+
+**Comment:**
+
+This seems like dead code with external linkage, or something that should be made `static`
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Utils/GPUUtils.cpp`
+
+**Line:** 1112
+
+**Comment:**
+
+`getXorShuffleParamsImpl` overloads `failure()` with two distinct meanings, and the caller in `ConfigUtils.cpp` cannot tell them apart:
+
+1. Line 1111: returns `failure()` when the layout is already conflict-free (no swizzle needed).
+2. Returns `failure()` everywhere else when something genuinely went wrong (no phase model, no bitwidth, no bank count, search exhausted).
+
+Look at the scaled MMA path in `ConfigUtils.cpp`:
+
+```c++
+if (failed(lhsSwizzleAttr) || failed(rhsSwizzleAttr)) {
+  promotionArray = {};
+}
+```
+
+If either LHS or RHS happens to be conflict-free, `promotionArray` is wiped out entirely. That removes promotion for both operands and silently changes codegen for a pattern that was previously promoted. The intent is clearly "no swizzle => use plain `defaultConfigAttr`", not "drop all promotion".
+
+Please distinguish these states. Options:
+- Return `std::optional<XorShuffleParams>` semantic where `nullopt` means "no swizzle needed (and that is fine)" vs. `FailureOr` for actual failures.
+- Or return a sentinel like `XorShuffleParams{0,0}` to signal "no swizzle needed".
+
+Either way, the caller must be able to distinguish "swizzle needed but couldn't be computed" (true failure) from "no swizzle needed" (use default config). The current behavior is a latent regression for scaled MMA on CDNA4 the moment a tile shape happens to be conflict-free.
+
+---
+
+### Comment by kuhar (reply)
+
+**File:** `compiler/src/iree/compiler/Codegen/Utils/GPUUtils.cpp`
+
+**Line:** 1112
+
+**Comment:**
+
+🤮
+
+---
+
+### Comment by kuhar (reply)
+
+**File:** `compiler/src/iree/compiler/Codegen/Utils/GPUUtils.cpp`
+
+**Line:** 1112
+
+**Comment:**
+
+(avoid double-nullable types as much as possible)
+
+---
+
+### Comment by kuhar (reply)
+
+**File:** `compiler/src/iree/compiler/Codegen/Utils/GPUUtils.cpp`
+
+**Line:** 1112
+
+**Comment:**
+
+I'd prefer if XorShuffleParams had a state that indicated 'no shuffle'
+
+---
+
+### Comment by kuhar (reply)
+
+**File:** `compiler/src/iree/compiler/Codegen/Utils/GPUUtils.cpp`
+
+**Line:** 1112
+
+**Comment:**
+
+You could also have it opt into llvm-style RTTI and have a different types for xor / pad / no avoidance.
+
+---
+
+### Comment by kuhar (reply)
+
+**File:** `compiler/src/iree/compiler/Codegen/Utils/GPUUtils.cpp`
+
+**Line:** 1112
+
+**Comment:**
+
+What is the interpretation of `xor<0, 0>`? I think we should have a canonical identity state and a helper function like `isIdentity()`
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Utils/GPUUtils.cpp`
+
+**Line:** 1163
+
+**Comment:**
+
+The DMA constraint only checks `accessElems * elemBits >= min(dma_sizes)`, but `AMDGPULowerCoalescedDMAToGatherLDS` later chooses larger DMA segments and requires `access_width % elementsPerLane == 0`. For gfx950 BF16, `xor_shuffle<128,4>` is compatible with 32-bit DMA but not a 128-bit segment (8 BF16/lane), so lowering can reject the generated swizzle. Please mirror `findSwizzleIncompatibleSegment` or reject incompatible DMA swizzles during search.
+
+---
+
+## PR #24425: [LLVMGPU] Avoid degenerate SIMT matmul unit tiles
+
+**Author:** YuWei-CH
+**URL:** https://github.com/iree-org/iree/pull/24425
+**State:** MERGED
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/LLVMGPU/test/config_matvec.mlir`
+
+**Line:** 439
+
+**Comment:**
+
+@efric can you confirm performance on this one?
+
+---
+
+## PR #24422: [CUDA] Add Ada sm_89 target support
+
+**Author:** YuWei-CH
+**URL:** https://github.com/iree-org/iree/pull/24422
+**State:** MERGED
+
+### Review Summary by kuhar (COMMENTED)
+
+**Comment:**
+
+Looks good overall
+
+Can you also add a test for target features, similar to https://github.com/iree-org/iree/blob/main/compiler/plugins/target/ROCM/test/target_device_features.mlir ?
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/plugins/target/CUDA/test/sm89_target.mlir`
+
+**Line:** 1
+
+**Comment:**
+
+This seems redundant now that we have `compiler/plugins/target/CUDA/test/target_device_features.mlir`
+
+---
+
+## PR #24408: [VectorDistribute] Rework LDS operand promotion
+
+**Author:** sommerlukas
+**URL:** https://github.com/iree-org/iree/pull/24408
+**State:** OPEN
+
+### Review Summary by kuhar (COMMENTED)
+
+**Comment:**
+
+Just a drive-by nit, I haven't had time to review the logic
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUVectorAlloc.cpp`
+
+**Line:** 145
+
+**Comment:**
+
+```suggestion
+  Operation *op = nullptr;
+```
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/GPU/GPUVectorAlloc.cpp`
+
+**Line:** 175
+
+**Comment:**
+
+```suggestion
+      .Default(std::nullopt);
+```
+
+---
+
+## PR #24387: [VectorExt] Add generic lowering of iree_vector_ext.arg_compare
+
+**Author:** bangtianliu
+**URL:** https://github.com/iree-org/iree/pull/24387
+**State:** MERGED
+
+### Review Summary by kuhar (COMMENTED)
+
+**Comment:**
+
+A few comments
+
+---
+
+### Review Summary by kuhar (APPROVED)
+
+**Comment:**
+
+LGTM % minor comments but please wait for another approval from someone more familiar with this part of the codebase
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/VectorExt/Transforms/LowerArgCompareToVector.cpp`
+
+**Line:** 44
+
+**Comment:**
+
+I think this assumes the yielded compare value was produced inside the comparator body. The op verifier allows the region to capture an external i1, and with a body that directly yields that value this pass currently hits the IRMapping assertion instead of rejecting or lowering it. Either use lookupOrDefault for the yielded value, or tighten the verifier to forbid captures before this lowerer runs. We should have a test case that covers this too.
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/VectorExt/Transforms/LowerArgCompareToVector.cpp`
+
+**Line:** 80
+
+**Comment:**
+
+This emits one `scf.for` per parallel result. Fine for one-output-per-thread TileAndFuse, but `vector<64x128xf32>` would create 64 reduction loops. Please document/enforce that narrow-shape assumption or use one loop over the parallel slice.
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/VectorExt/Transforms/LowerArgCompareToVector.cpp`
+
+**Line:** 97
+
+**Comment:**
+
+Can you extend this comment with a TODO to revisit large parallel dim handling later on?
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/VectorExt/Transforms/LowerArgCompareToVector.cpp`
+
+**Line:** 99
+
+**Comment:**
+
+nit: No need to materialize a brand new vector just to drop the last element
+```suggestion
+    ArrayRef<int64_t> parallelShape = shape.drop_back();
+    int64_t numParallelElems = ShapedType::getNumElements(parallelShape);
+```
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/VectorExt/Transforms/LowerArgCompareToVector.cpp`
+
+**Line:** 200
+
+**Comment:**
+
+you should be able to use the walk pattern rewrite driver here since you don't need to iterate until fixpoint
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/VectorExt/Transforms/test/lower_arg_compare.mlir`
+
+**Line:** 337
+
+**Comment:**
+
+Test coverage gaps worth filling:
+1. Multi-op comparator body (all current tests use a single arith.cmpf). cloneComparatorRegion clones operations one-by-one and remaps results in a loop; a body with at least two chained ops (e.g., arith.subf followed by arith.cmpf) would exercise that result-mapping loop.
+2. index_base combined with multi-D parallel dims (e.g., reducing vector<4x128xf32> over dim 1 with a non-zero base). Currently, only the 1-D + index_base case is covered, so we never verify that arith.addi(base, iv) lands inside each per-parallel-element scf.for.
+3. Negative test for non-pure ops in the comparator (op verifier should catch, but a CHECK-NOT-style integration test guards against accidental relaxation). (This is more of nit).
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/LLVMGPU/Passes.cpp`
+
+**Line:** 578
+
+**Comment:**
+
+Please keep a short rationale for this pass placement. The old comment explained why TileAndFuse could not rely on the VectorDistribute nested-layout lowering; now this pass runs immediately after vectorization with no note. A one-sentence comment saying this handles TileAndFuse `arg_compare` after generic vectorization would be enough.
+
+---
+
+## PR #24145: [CI] Cache bazel builds
+
+**Author:** amd-eochoalo
+**URL:** https://github.com/iree-org/iree/pull/24145
+**State:** OPEN
+
+### Comment by kuhar
+
+**File:** `.github/workflows/ci_linux_x64_bazel.yml`
+
+**Line:** 94
+
+**Comment:**
+
+This looks like something that should be checked into the repo as a script so that we can test locally; actions are not reproducible otherwise. Maybe make it a part of your script? WDYT?
+
+---
+
+## PR #24103: [GPU][Codegen] Choose VDMFMA intrinsics for 16bit input skinny gemms
+
+**Author:** efric
+**URL:** https://github.com/iree-org/iree/pull/24103
+**State:** MERGED
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Dialect/GPU/TargetUtils/ConfigUtils.cpp`
+
+**Line:** 368
+
+**Comment:**
+
+the first condition is redundant, no?
+
+---
+
+## PR #24093: [Codegen] Add VectorDistribute constraint generation scaffolding for matmul and conv
+
+**Author:** RattataKing
+**URL:** https://github.com/iree-org/iree/pull/24093
+**State:** MERGED
+
+### Review Summary by kuhar (COMMENTED)
+
+**Comment:**
+
+Test coverage gap: the only negative path tested is "no compatible MMAs" via empty mma = []. Please add at least:
+
+1. A negative test where subgroup_size_choices does not match any MMA's getSubgroupSize() (covers the mma.getSubgroupSize() != targetSubgroupSize skip).
+2. A negative test where the element types do not match any MMA's a/b types (covers the aType/bType mismatch in canTargetIntrinsic).
+3. A test with a batched contraction (non-empty batch dim) so that the batch handling in the M/N/K assignment is exercised; today only rank-2 / rank-4 generics and conv are tested.
+4. A test where multiple MMAs are compatible to verify the de-duplication / ordering of the OneOfKnobAttr options.
+
+These are the kinds of edge cases the constraint generator needs to be robust on before tuning relies on it.
+
+---
+
+### Review Summary by kuhar (COMMENTED)
+
+**Comment:**
+
+A few comments
+
+---
+
+### Review Summary by kuhar (APPROVED)
+
+**Comment:**
+
+LGTM, thanks for all the fixes
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/VerifyPipelineConstraints.cpp`
+
+**Line:** 77
+
+**Comment:**
+
+Fixed literals in the knob template should be checked against the config. Right now any `IntegerAttr` template entry succeeds, so a config with a non-1 outer tile can bypass the literal `1` entries emitted for unsupported outer M/N dims. Please require equality or fail extraction.
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/test/insert_smt_constraints.mlir`
+
+**Line:** 34
+
+**Comment:**
+
+Inconsistent test fixtures: in insert_smt_constraints.mlir (this PR) the linalg.fill had its root_op = #iree_codegen.root_op<set = 0> annotation removed, while in the new config_llvm_gpu_constraints.mlir test matmul_and_fill retains the same root_op annotation on both linalg.fill and linalg.matmul. Pick one convention -- the realistic one (root_op on both, since DispatchCreation marks all roots in a set) is what getTunableOp is designed for, so I would keep the root_op on the fill in the existing test as well. Otherwise the existing test stops exercising the "fill is also a root, prefer matmul" selection logic that getTunableOp is the entire reason for.
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/test/verify_smt_constraints_e2e.mlir`
+
+**Line:** 27
+
+**Comment:**
+
+This e2e file still lacks a real success-path test. `@matmul_e2e_verify` has no `hal.executable.target`, so insertion returns early and no constraints are produced; the `CHECK-NOT` passes trivially. Please add a sibling with a HAL target and satisfying `lowering_config` so the test proves generated constraints are evaluated and erased.
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/Common/test/verify_smt_constraints_e2e.mlir`
+
+**Line:** 58
+
+**Comment:**
+
+Please keep this e2e failure case realistic by giving the fill the same `root_op` set. With both ops marked, the verifier currently finds the fill first, sees no lowering config, and skips verification instead of reaching the matmul. The verifier should pick the configured root op or keep walking.
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/LLVMGPU/CMakeLists.txt`
+
+**Line:** 124
+
+**Comment:**
+
+This new dependency makes the parent LLVMGPU library depend on the split LLVMGPUConstraintGenerator target, but the parent still lists LLVMGPUConstraintGenerator.cpp in its own SRCS. That keeps the source compiled in both targets and makes the split mostly cosmetic. Please remove LLVMGPUConstraintGenerator.cpp from the parent SRCS here and in the Bazel target.
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/LLVMGPU/LLVMGPUConstraintGenerator.cpp`
+
+**Line:** 53
+
+**Comment:**
+
+Dead constant: kKnobMappingKey is declared here ("mapping") but never referenced anywhere in this file or the rest of the compiler tree. The accompanying comment says "For subgroup basis subdict", but buildVectorDistributeKnobsDict only emits the kKnobCountsKey entry. Either drop kKnobMappingKey or add a TODO explaining when it will be used; right now it is just noise that will drift out of date.
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/LLVMGPU/LLVMGPUConstraintGenerator.cpp`
+
+**Line:** 108
+
+**Comment:**
+
+nit: SmallVector<int64_t> bounds = loopInfo.staticLoopRanges; makes an unnecessary heap copy. Either use ArrayRef<int64_t> bounds = loopInfo.staticLoopRanges; or just index loopInfo.staticLoopRanges directly.
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/LLVMGPU/LLVMGPUConstraintGenerator.cpp`
+
+**Line:** 113
+
+**Comment:**
+
+Static-shape guard missing before passing problem dims to canTargetIntrinsic. We should bail out early on dynamic shapes since we can't quite handle them in the tuner as of today. If you need a testcase:
+
+```
+  func.func @dynamic_matmul(%lhs: tensor<?x?xf32>, %rhs: tensor<?x?xf32>, %empty: tensor<?x?xf32>)
+      -> tensor<?x?xf32> attributes {hal.executable.target = #exec_target} {
+    %r = linalg.matmul {root_op = #iree_codegen.root_op<set = 0>}
+        ins(%lhs, %rhs : tensor<?x?xf32>, tensor<?x?xf32>)
+        outs(%empty : tensor<?x?xf32>) -> tensor<?x?xf32>
+    return %r : tensor<?x?xf32>
+  }
+```
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/LLVMGPU/LLVMGPUConstraintGenerator.cpp`
+
+**Line:** 117
+
+**Comment:**
+
+This comment says dynamic extents are `-1` but that's an implementation detail subject to change; use `ShapedType::kDynamic` instead or `ShapedType::isDynamic(...)` as a predicate.
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/LLVMGPU/LLVMGPUConstraintGenerator.cpp`
+
+**Line:** 134
+
+**Comment:**
+
+This loop admits block MMA intrinsics, but the VectorDistribute matmul and convolution config paths explicitly skip block intrinsics. Because getIntrinsic rebuilds every MMAAttr through the non-batch GPUIntrinsicType constructor, canTargetIntrinsic will not reject those block layouts, so mma_kind can contain choices the pipeline never selects. Please mirror the config filter here and skip block intrinsics. We should also have a test for this.
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/LLVMGPU/LLVMGPUConstraintGenerator.cpp`
+
+**Line:** 197
+
+**Comment:**
+
+Current auto VectorDistribute config only materializes non-unit workgroup tiles for the innermost M/N/K dims: KernelConfig sets the dropped M/N/K dims to 1 before filling mDim/nDim/kDim. The constraint template is wider and makes every M/N dim a knob (`expanded_matmul` exposes `wg_0..wg_3`).
+
+If that wider search space is intentional, please add a test or comment showing that non-1 outer M/N tiles are valid when supplied by a tuning spec. Otherwise keep the template aligned with the generated configs and encode those outer dims as fixed 1.
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/LLVMGPU/LLVMGPUConstraintGenerator.cpp`
+
+**Line:** 224
+
+**Comment:**
+
+The comment "A successful call to linalg::inferContractionDims guarantees that dims.m and dims.n are non-empty." is misleading because this code path is also reached for convolutions, where dims was populated from inferConvolutionDims (output image / output channel / input channel). The non-empty guarantee for the conv case is enforced separately by the explicit outputImage.empty() || outputChannel.empty() || inputChannel.empty() check in inferContractionLikeDims -- please update the comment so a future reader does not weaken the conv-side check thinking only the contraction guarantee matters. Suggestion: "Both inferContractionLikeDims branches guarantee dims.m and dims.n are non-empty (asserted/early-returned for conv)."
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/LLVMGPU/LLVMGPUConstraintGenerator.cpp`
+
+**Line:** 230
+
+**Comment:**
+
+This makes the generated constraints non-verifying for real VectorDistribute configs. The knobs template records `subgroup_basis` as a nested dict `{counts = [...]}`, but existing GPU lowering configs store `subgroup_basis` as `[[counts], [mapping]]` via `GPULoweringConfigUtils::setBasis`. `VerifyPipelineConstraints::extractKnobValues` requires the same container shape and returns failure on this mismatch, so the verifier skips the whole constraints region before checking `workgroup` or `reduction`. I reproduced that with a matmul whose lowering config had `workgroup = [7, 256, 0]`; the verify pass still exited 0. Since the current PR does not consume subgroup-basis knobs and the existing review thread already notes this should be dropped for now, please remove `subgroup_basis` from the knobs template until it can match the real lowering-config shape.
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/LLVMGPU/LLVMGPUConstraintGenerator.cpp`
+
+**Line:** 327
+
+**Comment:**
+
+The Attribute attr parameter to getTunableOp is unused. Drop it from the signature; the caller can keep cast<IREE::GPU::PipelineAttr>(attr) where it is. (Removing the parameter also removes the implication that the selector is somehow pipeline-aware -- it currently is not.)
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/LLVMGPU/LLVMGPUConstraintGenerator.cpp`
+
+**Line:** 335
+
+**Comment:**
+
+This `dyn_cast<PipelineAttrInterface>` plus null check is dead code: `IREE::GPU::PipelineAttr` declares the interface. Please use `cast<>` or pass the concrete `PipelineAttr` directly to `createConstraintsOpShell`.
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/LLVMGPU/test/config_llvm_gpu_constraints.mlir`
+
+**Line:** 162
+
+**Comment:**
+
+The new LIT test verifies the structure of the knobs dictionary but never checks any of the iree_codegen.smt.assert "... must be divisible by ..." lines that the constraint generator actually emits. The whole point of emitVectorDistributeConstraints is which loop dims get a divisibility check (M/N -> wg_*, K -> red_*, others -> nothing) and how the loop range argument is named in the diagnostic. None of that is locked in by these tests.
+
+I ran the new file through iree-opt and confirmed the assertions are produced. Concretely, for @matmul_and_fill you get assertions on dim_0/wg_0, dim_1/wg_1, and dim_2/red_2. For @conv_2d_nhwc_hwcf only wg_1, wg_2, wg_3, red_6 get assertions (outer batch is 0 and skipped; spatial filter and inner channel dims are skipped). For @expanded_matmul you get wg_0..wg_3 plus red_4. None of this asymmetry between knob structure and emitted assertions is verified.
+
+Please add CHECK lines for the assertions in at least the matmul, expanded_matmul, and conv cases. The "non-innermost-M/N divisibility" and "K-only reduction divisibility" behavior is exactly the part of this PR most likely to regress and is the most user-visible output of the pass.
+
+---
+
+### Comment by kuhar
+
+**File:** `compiler/src/iree/compiler/Codegen/LLVMGPU/test/config_llvm_gpu_constraints.mlir`
+
+**Line:** 274
+
+**Comment:**
+
+These two `@matmul_with_mismatch_mma_element_types` tests appear to exercise the same skip path. Please drop one, or rename/comment them so the distinct coverage is clear.
+
+---

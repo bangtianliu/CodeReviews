@@ -2,9 +2,9 @@
 
 **Repository:** [iree-org/iree](https://github.com/iree-org/iree)
 
-**Based on 1372 review comments across 103 PRs**
+**Based on 1475 review comments across 118 PRs**
 
-**Generated:** 2026-05-05
+**Generated:** 2026-05-05 (last updated 2026-05-20 with 103 additional kuhar comments)
 
 ---
 
@@ -96,6 +96,9 @@
 - **Start error messages with a lower-case letter** and finish without a period
 - **Use descriptive variable names** - avoid single-letter names like `J`, `J1`, `vJ`; use `lhs`/`rhs` or semantically meaningful names
 - **Preserve existing comments when refactoring** - don't silently remove comments in moved/restructured code
+- **Don't refer to "previous" / "new" / "old" code in comments** - readers don't know the timeframe; always describe the *current* state of the codebase
+- **Don't use non-ASCII characters** in source files (incl. test files)
+- **Cite the source** for safety-critical data tables (e.g., hardware bank/phase tables) - a single wrong entry can silently shift codegen with no test failure
 - Reference: [LLVM Coding Standards - Vertical Whitespace](https://google.github.io/styleguide/cppguide.html#Vertical_Whitespace)
 
 ### Function Parameters
@@ -119,6 +122,17 @@
 - **Prefer `std::optional`** over nullable pointers when appropriate
 - **Use LLVM ADT containers** (SmallVector, DenseMap, etc.) for better performance
 - **Follow naming conventions** - UpperCamelCase for types, lowerCamelCase for variables/functions (camelCase style)
+- **Use `llvm::is_contained({...}, value)`** for membership checks instead of chained `==` or switch:
+  ```cpp
+  // Good
+  if (llvm::is_contained({Model::A, Model::B}, model)) return 64;
+  return 32;
+  ```
+- **Use `llvm::all_equal`** to check that a range's elements are identical
+- **Use existing LLVM string-join helpers** (`llvm::join`, `llvm::interleaveComma`) instead of hand-rolled loops
+- **`static` is redundant on namespace-scope `constexpr` variables** - `constexpr` already implies internal linkage
+- **Use `ShapedType::kDynamic` / `ShapedType::isDynamic(...)`** - never hardcode `-1` in comments or code as the dynamic sentinel; it is an implementation detail subject to change
+- **Mark namespace-scope helpers `static`** if they have no external callers - otherwise they appear as dead external-linkage symbols
 
 ---
 
@@ -213,11 +227,31 @@
 - **CHECK lines should verify actual values** - e.g., check layout element tile sizes, not just that a layout exists
 - **Don't add dead code** - land interface implementations alongside e2e tests that exercise them
 - **Remove tests that don't add value** - e.g., if a test only checks propagation already tested elsewhere
+- **Watch for trivially-passing `CHECK-NOT`** - if the function under test exits early due to missing setup (e.g., no `hal.executable.target`), the test proves nothing. Always pair with a positive companion that exercises the pipeline.
+- **Don't write tautological unit tests** - "checks that the constant is whatever the constant is" is not a test
+- **Keep test fixtures consistent across a PR** - if you add a new test that pins `root_op` on `linalg.fill`, don't remove the same annotation from an existing sibling test; you silently change what the existing test exercises
+- **Lock in the actual emitted IR**, not just structural surroundings - if the pass emits divisibility asserts on specific dims, CHECK those asserts, not just the surrounding dictionary
+- **Use `--verify-diagnostics`** for expected-error tests instead of ad-hoc CHECK plumbing
+- **Move target-specific tests to the target directory** (e.g., `gpu_nested_layout_*` rocdl-only tests go under `rocdl/`)
+- **Multi-op comparator/region bodies need a multi-op test case** - a one-op body doesn't exercise the result-remapping loop
+- **Cover dynamic-shape paths or explicitly bail** - if the pass can't handle dynamic shapes, add a static-shape guard *and* a dynamic-shape test that confirms the bail-out
+
+### Test Coverage Gap Patterns
+These review patterns repeat - audit new ops/passes against them:
+- **Negative subgroup_size / element type / batch dim** mismatches when canTargetIntrinsic-style filters are involved
+- **Multiple compatible options** to verify de-duplication and ordering
+- **Dynamic shapes** for any pass that walks `staticLoopRanges`
+- **Block-vs-non-block MMA intrinsics** when the pipeline only accepts one
+- **Targeted unit/lit tests for "magic table" data** (phase groups, bank layouts) so a stray edit breaks the test, not silently the codegen
+- **Conflict-free / no-op paths** must be distinguishable from genuine failures in tests (see Type Design below)
 
 ### C/C++ Tests
 - **Use gtest for C API tests** - C API tests can be written in C++
 - **Add negative test cases** - test error conditions and invalid inputs
 - **Include static_asserts** for C binding type safety
+- **Avoid system includes** (`<vector>`, `<string>`, etc.) when LLVM ADT alternatives exist (`SmallVector`, `StringRef`)
+- **Use `testing::ElementsAreArray`** for gtest array comparisons instead of allocating a `SmallVector` to compare against
+- **Use a for loop** instead of unrolled repeated `EXPECT_*` calls when checking a sequence
 
 ---
 
@@ -235,6 +269,9 @@
 - **Move checks before dependent code** - validate inputs early
 - **Mark helper functions as `static`**
 - **Remove unused code completely** - don't leave commented-out code
+- **Drop unused parameters** - an unused `Attribute attr` argument implies the function is "pipeline-aware" when it isn't; mislead removed by deleting the param
+- **For fixed-position returns, use `std::tuple`** rather than out-params when the order (e.g., `M, N, K`) is part of the contract and isn't exposed publicly
+- **When you split a target, actually split the source** - don't list the same `.cpp` in both the parent library and the new split library in CMake/Bazel; that defeats the split
 
 ### SmallVector Patterns
 - **Use `SmallVector::insert`** for inserting elements:
@@ -341,3 +378,71 @@
 - **Use `emitOpError()`** for operation-specific errors
 - **Use `notifyMatchFailure()`** to explain why pattern matches fail
 - **Include actual values** in error messages when possible
+
+---
+
+## Type Design and Error Semantics
+
+### Avoid Double-Nullable Types
+- **Avoid `std::optional<T*>` / `std::optional<DyncCastable>`** - if the inner value can already be null, the optional layer is redundant *and* confusing. A `dyn_cast` that returns null already encodes "absent"; don't wrap it in `optional`.
+- **Avoid `FailureOr<std::optional<T>>`** for the same reason.
+- **If a function can return "no result needed" vs. "result couldn't be computed"**, encode that explicitly in the return type - don't let the caller infer it from `null`.
+
+### Distinguish "Not Needed" from "Failed"
+A persistent review pattern: **`failure()` must mean one thing per function.** Don't overload it to mean both "the requested transform isn't needed (use default)" *and* "something went wrong (bail)" - callers can't tell them apart and silently regress in the "not needed" case. Options:
+- Return `std::optional<Result>` where `nullopt` = "not needed" and exceptions/diagnostics handle real failure
+- Return a sentinel value with an explicit `isIdentity()` / `isNoOp()` helper (e.g., `XorShuffleParams{0,0}` with `isIdentity()`)
+- Use LLVM-style RTTI with distinct subclasses for the conceptually different outcomes (e.g., `XorSwizzle`, `PadSwizzle`, `NoSwizzle`)
+
+### Verifier Tightening
+- **Tighten the verifier rather than relying on downstream pass assertions** - if a region is allowed to capture an external i1 that the lowering can't handle, fix the verifier (or the lowering's `IRMapping`), don't leave it as an internal-assert landmine
+- **Use `lookupOrDefault`** when remapping values that may not have been cloned into the new region
+
+---
+
+## Hardware Modeling and GPU Targets
+
+### Granularity
+- **Coarse target enums (cdna3 / cdna4 / rdna3) hide per-generation differences** - bank counts, phase tables, and LDS layouts vary; don't assume one enum captures all relevant hw state
+- **Derive related target params from a single source** - e.g., number of threads and LDS bank count should both follow from the generation attribute, not be hardcoded independently
+- **Trim dead target entries** - drop enum cases for hardware IREE no longer targets (cdna1, rdna1-2, etc.)
+- **Default configs should fall back to safe minimums** (e.g., bank width) rather than asserting/failing on unknown targets
+
+### Safety-Critical Tables
+- **Cite the spec/source** for hardware tables (phase groups, bank conflict maps) in a comment
+- **Assert documented preconditions** (e.g., `assert(numThreads == 64)` for a CDNA4-only branch)
+- **Validate the table covers the actual access widths** - if the table is built for `ds_read_b128`, document/guard against wider reads (e.g., 32-byte scaled-MMA operands)
+- **Pin tables with targeted unit tests** so an accidental edit becomes a test failure rather than a silent codegen regression
+
+### Wiring Constraints Through All Paths
+- **If you add a constraint (e.g., DMA min-access-width) gated on a flag, pass that flag everywhere the constraint applies** - it's easy to leave a sibling call defaulted to `false` and silently disable the constraint on the only path that motivated it
+- **Mirror filters between configs and constraint generators** - if the matmul/conv config skips block MMA intrinsics, the constraint generator must skip them too, or the tuner emits choices the pipeline never selects
+- **Don't broaden compiler/test flags more than necessary** - `--iree-input-demote-f64-to-f32=false` for one test should not apply to the whole suite; split it into its own suite in both BUILD.bazel and CMakeLists.txt
+
+### Lowering vs. Target Coverage
+- **Prefer "make the lowering work everywhere" over "add a target-env entry to gate it"** - per kuhar: most lowerings can be made to work for all targets by decomposing to supported scalars, instead of gating with a new target capability bit
+- **`gpu.shuffle` is target-agnostic** - it does not know native bitwidths; comments/asserts that claim otherwise are wrong
+
+---
+
+## Build, CI, and Tooling
+
+### Bazel/CMake
+- **Don't add `allow_empty` globs reflexively** - if there are no files to match, drop the whole `exports_files` / glob instead of papering over with `allow_empty = True`
+- **A split library target must own its sources exclusively** - remove the split source from the parent's `SRCS` when you create the new target, otherwise the source compiles in both
+
+### CI
+- **Inline shell in `.github/workflows/*.yml` should be a checked-in script** when it's non-trivial - actions are not locally reproducible, but a script in the repo is. Bonus: the workflow can also call the script.
+- **Don't drop `iree-hip` / `iree-rocm` duplicate flags** - one is sufficient (kuhar prefers `iree-rocm`)
+
+### Linters
+- **Don't add entries to `build_tools/linters/typos.toml`** to silence transient warnings - fix the typo or leave the file alone
+
+---
+
+## Review Etiquette / PR Hygiene
+
+- **`LGTM % minor comments but wait for another approval`** is the common pattern for cross-area reviews; respect domain ownership
+- **A `CHANGES_REQUESTED` for "I don't understand why we lost test coverage"** is binding - any PR that removes existing checks needs to justify the deletion in the PR body
+- **Drive-by nits are explicitly labeled** - don't block PRs on `nit:` comments unless the author asks
+- **Suggestion blocks** (` ```suggestion`) should be preferred over prose for one-line fixes - they're clickable
